@@ -1,0 +1,102 @@
+# GitHub: file .gitignore per progetto (Python / ML / general)
+# Ignora file temporanei, virtualenv, dati, pesi modelli, credenziali, IDE settings, cache
+
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+datatrove_venv/
+
+# Python packaging / build
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Test / tooling caches
+.pytest_cache/
+pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data / artifacts / models (non condividere file di training o pesi)
+data/
+datasets/
+data_raw/
+data_processed/
+results/
+outputs/
+logs/
+checkpoints/
+models/
+*.ckpt
+*.pth
+*.pt
+*.bin
+
+# Hugging Face / caches
+.cache/
+.huggingface/
+transformers_cache/
+torch_cache/
+
+# Secrets / environment
+.env
+.env.*
+*.secret
+*.key
+*.pem
+*.crt
+credentials.json
+secrets.json
+
+# IDEs / editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (if presenti)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+tmp/
+
+# Large files (aggiungi estensioni specifiche se necessario)
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+
+# Optional: evita di committare file di config locali
+local_settings.py
+config/*.local
+
