@@ -35,19 +35,19 @@ htmlcov/
 *.ipynb_checkpoints
 
 # Data / artifacts / models (non condividere file di training o pesi)
-data/
-datasets/
-data_raw/
-data_processed/
-results/
-outputs/
-logs/
-checkpoints/
-models/
-*.ckpt
-*.pth
-*.pt
-*.bin
+# data/
+# datasets/
+# data_raw/
+# data_processed/
+# results/
+# outputs/
+# logs/
+# checkpoints/
+# models/
+# *.ckpt
+# *.pth
+# *.pt
+# *.bin
 
 # Hugging Face / caches
 .cache/
