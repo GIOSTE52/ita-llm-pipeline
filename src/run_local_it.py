@@ -4,6 +4,7 @@ import json
 import math
 import argparse
 from datetime import datetime
+import time
 
 import regex as re  # pip install regex
 
@@ -95,7 +96,7 @@ BOILERPLATE_HINTS = (
     "accetta", "impostazioni", "abbonati", "iscriviti", "newsletter", 
     "pubblicità", "advertising", "sponsored", "all rights reserved"
 )
-
+'''
 # -----------------------------
 # Optional Language ID backends
 # -----------------------------
@@ -147,7 +148,7 @@ def lang_id_langdetect(text: str):
         return (top.lang == "it" and float(top.prob) >= 0.70, float(top.prob), top.lang)
     except Exception:
         return None
-
+'''
 
 # -----------------------------
 # Text cleaning & scoring
@@ -165,7 +166,7 @@ def basic_normalize(text: str) -> str:
 
 def char_stats(text: str):
     total = max(len(text), 1)
-    letters = sum(1 for c in text if re.match(r"\p{L}", c)) # lettere
+    letters = sum(1 for c in text if c.isalpha() # lettere
     digits = sum(1 for c in text if c.isdigit())            # cifre
     spaces = sum(1 for c in text if c.isspace())            # spazi
     punct = total - letters - digits - spaces               # simboli, punteggiatura, etc ...
@@ -349,6 +350,7 @@ def is_italian(text: str, ft_model=None):
     Ritorna (is_it, confidence, backend)
     backend: fasttext:* | langdetect:* | heuristic | heuristic_gate:*
     """
+    '''
     # 1) fasttext
     ft = lang_id_fasttext(text, ft_model) if ft_model is not None else None
     if ft is not None:
@@ -360,8 +362,8 @@ def is_italian(text: str, ft_model=None):
     if ld is not None:
         ok, prob, label = ld
         return ok, prob, f"langdetect:{label}"
-
-    # 3) euristica + gates
+    '''
+    # 1) euristica + gates
     score = italian_heuristic_score(text)
     ts = token_stats(text)
     bs = bigram_stats(text)
@@ -453,6 +455,7 @@ def make_filter(reject_path: str, ft_model=None):
 # Main
 # -----------------------------
 def main():
+    t0=time.perf_counter()
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", default="input/mixed", help="Cartella con file .jsonl")
     ap.add_argument("--output", default="output", help="Cartella output (kept)")
@@ -477,6 +480,9 @@ def main():
     # tasks=1 per scrivere rejects senza race conditions
     executor = LocalPipelineExecutor(pipeline=pipeline, tasks=1)
     executor.run()
+
+    t1=time.perf_counter()
+    print(f"[STATS] TEMPO TOTALE IMPIEGATO DAL PROGRAMMA 'run_senza_regex.py': {t1 - t0:.2f}secondi ")
 
 
 if __name__ == "__main__":
