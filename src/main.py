@@ -50,8 +50,14 @@ parser.add_argument(
 parser.add_argument(
     "--output-dir",
     type=str,
-    default=os.path.expandvars("$HOME/data"),
+    default=os.path.expandvars("$HOME/output_data"),
     help="Insert absolute path to output data"
+)
+parser.add_argument(
+    "--rejected-dir",
+    type=str,
+    default=None,
+    help="Insert path to directory that contains rejected file by filters (e.g. home/user/output_data/rejected)"
 )
 
 args = parser.parse_args()
@@ -60,19 +66,19 @@ args = parser.parse_args()
 if args.config:
     config_path = os.path.join(args.root_dir, args.config)
     load_config(config_path)
+# Leggo le variabili di environment (se impostate nel config), altrimenti uso i valori degli argomenti
+ROOT_DIR = os.environ.get("ROOT_DIR", args.root_dir)
+DATA_DIR = os.environ.get("DATA_DIR", os.path.join(ROOT_DIR, "data"))
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", args.output_dir)
+REJECTED_DIR = os.environ.get("REJECTED_DIR", args.rejected_dir)
 
-ROOT_DIR = args.root_dir
-DATA_DIR = os.path.join(ROOT_DIR, "data")
-OUTPUT_DIR = args.output_dir
-
-
-# Crea la cartella output se non esiste
+# Crea le cartelle output e rejected se non esistono
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(REJECTED_DIR, exist_ok=True)
 
-# Scrivo un esempio di esecuzione con il SampleFilter(randomly keep 'rate'*100 percent of sample)
 pipeline = [
     # [
-        # Utilizzo gli ogetti Document per i test manuali
+        # # Utilizzo gli ogetti Document per i test manuali
         # Document(text="Qualsiasi cosa in italiano", id="it0"),
         # Document(text="Ancora altre cose in lingua italiana, me so rotto 'e scatole de guardà li schermi. Devo continuà a scrive' in romanaccio per testa' sta' pipeline qua, vediamo se sta' lunghezza glie va bene!", id="it1"),
         # Document(text="Now i speak english for experiment purpose, but i need to have doc_len minimun, so now we speak about something random. Today i came back from north of Rome. beaking bad is the best tv series till now.", id="en0"),
@@ -83,11 +89,18 @@ pipeline = [
         # Document(text="Log: INFO 2026-01-22 17:34:28 - User logged in from IP 192.168.1.1. Status: OK.Log: INFO 2026-01-22 17:34:28 - User logged in from IP 192.168.1.1. Status: OK.Log: INFO 2026-01-22 17:34:28 - User logged in from IP 192.168.1.1. Status: OK.",id="noise1"),
 
     # ],
-    JsonlReader(data_folder = DATA_DIR, glob_pattern="*.jsonl"),
-    # SamplerFilter(rate=0.5),
-    FineWebQualityFilter(),
+    JsonlReader(data_folder = DATA_DIR, glob_pattern="mixed.jsonl"),
+    # Scrivo un esempio di esecuzione con il SampleFilter(randomly keep 'rate'*100 percent of sample)
+    # SamplerFilter(rate=0.8),
+    FineWebQualityFilter(
+        exclusion_writer=JsonlWriter(
+            output_folder=REJECTED_DIR,
+            output_filename="risultati1.jsonl"
+            ) if os.path.exists(REJECTED_DIR) else None
+     ),
     JsonlWriter(
-        output_folder = OUTPUT_DIR
+        output_folder = OUTPUT_DIR,
+        output_filename = "risultati1.jsonl", 
     )
 ]
 
