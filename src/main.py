@@ -32,50 +32,36 @@ def load_config(config_path:str)->None:
     print(f"Config caricato: {config_path}")
     print(f"DATATROVE_COLORIZE_LOGS = {os.environ.get('DATATROVE_COLORIZE_LOGS')}")
 
-#Piccolo script di esempio per provare la pipeline con dei Document scitti manualmente
-parser = argparse.ArgumentParser(description="ITA LLM Pipeline")
-parser.add_argument(
-    "--config",
-    type=str,
-    default=None,
-    help="Insert relative path to file config (e.g. configs/default.conf)"
-)
-parser.add_argument(
-    "--root-dir",
-    type=str,
-    default=os.path.expandvars("$HOME/ita-llm-pipeline"),
-    help="Insert absolute path to project root directory"
-)
-parser.add_argument(
-    "--output-dir",
-    type=str,
-    default=os.path.expandvars("$HOME/output_data"),
-    help="Insert absolute path to output data"
-)
-parser.add_argument(
-    "--rejected-dir",
-    type=str,
-    default=None,
-    help="Insert absolute path to directory that contains rejected file by filters (e.g. home/user/output_data/rejected)"
-)
+def extract_args() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="ITA LLM Pipeline")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Insert relative path to file config (e.g. configs/default.conf)"
+    )
+    parser.add_argument(
+        "--root-dir",
+        type=str,
+        default=os.path.expandvars("$HOME/ita-llm-pipeline"),
+        help="Insert absolute path to project root directory"
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=os.path.expandvars("$HOME/output_data"),
+        help="Insert absolute path to output data"
+    )
+    parser.add_argument(
+        "--rejected-dir",
+        type=str,
+        default=None,
+        help="Insert absolute path to directory that contains rejected file by filters (e.g. home/user/output_data/rejected)"
+    )
 
-args = parser.parse_args()
+    return parser
 
-# Carico il file config se specificato tramite argomento
-if args.config:
-    config_path = os.path.join(args.root_dir, args.config)
-    load_config(config_path)
-# Leggo le variabili di environment (se impostate nel config), altrimenti uso i valori degli argomenti
-ROOT_DIR = os.environ.get("ROOT_DIR", args.root_dir)
-DATA_DIR = os.environ.get("DATA_DIR", os.path.join(ROOT_DIR, "data"))
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", args.output_dir)
-REJECTED_DIR = os.environ.get("REJECTED_DIR", args.rejected_dir)
-
-# Crea le cartelle output e rejected se non esistono
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(REJECTED_DIR, exist_ok=True)
-
-def main() -> None:
+def pipeline_design() -> None:
     pipeline = [
         # [
             # # Utilizzo gli ogetti Document per i test manuali
@@ -119,5 +105,28 @@ def main() -> None:
     executor.run()
 
 
+
+def main() -> None:
+    pipeline_design()
+
+
+
 if __name__ == "__main__":
+    # Gli argomenti e le costanti globali le definisco qui per avere il libero accesso da tutte le funzioni
+    args = extract_args().parse_args()
+
+    # Carico il file config se specificato tramite argomento
+    if args.config:
+        config_path = os.path.join(args.root_dir, args.config)
+        load_config(config_path)
+    # Leggo le variabili di environment (se impostate nel config), altrimenti uso i valori degli argomenti
+    ROOT_DIR = os.environ.get("ROOT_DIR", args.root_dir)
+    DATA_DIR = os.environ.get("DATA_DIR", os.path.join(ROOT_DIR, "data"))
+    OUTPUT_DIR = os.environ.get("OUTPUT_DIR", args.output_dir)
+    REJECTED_DIR = os.environ.get("REJECTED_DIR", args.rejected_dir)
+
+    # Crea le cartelle output e rejected se non esistono
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(REJECTED_DIR, exist_ok=True)
+
     main()
