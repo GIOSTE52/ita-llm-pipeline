@@ -464,7 +464,7 @@ def main():
     ap.add_argument("--fasttext-model", default="", help="Percorso a lid.176.bin o lid.176.ftz (opzionale)")
     args = ap.parse_args()
 
-    # ft_model = try_load_fasttext_lid(args.fasttext_model) if args.fasttext_model else None
+    ft_model = try_load_fasttext_lid(args.fasttext_model) if args.fasttext_model else None
 
     pipeline = [
         JsonlReader(
