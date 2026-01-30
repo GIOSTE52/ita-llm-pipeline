@@ -457,9 +457,9 @@ def make_filter(reject_path: str, ft_model=None):
 def main():
     t0=time.perf_counter()
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", default="input/mixed", help="Cartella con file .jsonl")
-    ap.add_argument("--output", default="output", help="Cartella output (kept)")
-    ap.add_argument("--rejects", default="debug/rejected.jsonl", help="File jsonl degli scarti")
+    ap.add_argument("--input", default="data/mixed.jsonl", help="Cartella con file .jsonl")
+    ap.add_argument("--output", default=os.path.expandvars("$HOME/output"), help="Cartella output (kept)")
+    ap.add_argument("--rejects", default=os.path.expandvars("$HOME/output/rejected"), help="File jsonl degli scarti")
     ap.add_argument("--text-key", default="text", help="Chiave del testo nel json")
     ap.add_argument("--fasttext-model", default="", help="Percorso a lid.176.bin o lid.176.ftz (opzionale)")
     args = ap.parse_args()
@@ -473,7 +473,8 @@ def main():
         ),
         LambdaFilter(make_filter(args.rejects, ft_model=ft_model)),
         JsonlWriter(
-            output_folder=args.output
+            output_folder=args.output,
+            
         )
     ]
 
