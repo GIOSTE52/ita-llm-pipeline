@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Dati in input (read-only)
+      - ./data:/app/data:ro
+      # Output e logs (read-write)
+      - ./output:/app/output
+      - ./logs:/app/logs
+    environment:
+      - DATATROVE_COLORIZE_LOGS=1
+      - DATATROVE_COLORIZE_LOG_FILES=1
+    command: ["python3", "src/main.py", "--config", "configs/default.conf"]
+

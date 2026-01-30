@@ -36,7 +36,7 @@ ITALIAN_STOPWORDS = {
     "quello", "quella", "quelli", "quelle",
     "che", "cui", "chi", "c'è", "non", "più", "anche", "come",
     "quali", "quale", "quanto", "quanta", "quanti", "quante",  
-    "alcuni","alucne", "qualche","qualcosa","qualcuno","qualcuna",
+    "alcuni","alcune", "qualche","qualcosa","qualcuno","qualcuna",
     "nulla", "niente", "nessuno", "nessuna", 
     "tutto", "tutte", "tutti", "tutta",
     "altro", "altri", "altre", "altra",
@@ -166,7 +166,7 @@ def basic_normalize(text: str) -> str:
 
 def char_stats(text: str):
     total = max(len(text), 1)
-    letters = sum(1 for c in text if c.isalpha() # lettere
+    letters = sum(1 for c in text if c.isalpha()) # lettere
     digits = sum(1 for c in text if c.isdigit())            # cifre
     spaces = sum(1 for c in text if c.isspace())            # spazi
     punct = total - letters - digits - spaces               # simboli, punteggiatura, etc ...
@@ -464,7 +464,7 @@ def main():
     ap.add_argument("--fasttext-model", default="", help="Percorso a lid.176.bin o lid.176.ftz (opzionale)")
     args = ap.parse_args()
 
-    ft_model = try_load_fasttext_lid(args.fasttext_model) if args.fasttext_model else None
+    # ft_model = try_load_fasttext_lid(args.fasttext_model) if args.fasttext_model else None
 
     pipeline = [
         JsonlReader(
