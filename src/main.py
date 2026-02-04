@@ -89,7 +89,7 @@ def pipeline_design() -> None:
         # ],
         # Come parametro glob_pattern inseriamo l'espressione (e.g *.jsonl, test*.jsonl) 
         # oppure direttamente il nome dei file da far leggere al JsonlReader
-        JsonlReader(data_folder = DATA_DIR, glob_pattern="mixed.jsonl"),
+        JsonlReader(data_folder = DATA_DIR, glob_pattern="test1.jsonl"),
         # Scrivo un esempio di esecuzione con il SampleFilter(randomly keep 'rate'*100 percent of sample)
         # SamplerFilter(rate=0.8),
         FineWebQualityFilter(
