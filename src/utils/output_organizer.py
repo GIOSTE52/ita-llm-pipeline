@@ -147,43 +147,91 @@ def run(output_dir: Path | str, output_csv_dir: Path | str | None = None) -> Tup
 # 	)
 # 	return parser
 
-def pie_graph(grouped: Dict[str, List[str]], title: str | None = None) -> None:
+def pie_graph(grouped: Dict[str, List[str]], title: str | None = None, save_path: Path | None = None) -> None:
+	"""
+	Genera un grafico a torta dalla distribuzione dei testi per tag.
+	
+	Args:
+		grouped: Dizionario con tag come chiavi e liste di testi come valori
+		title: Titolo opzionale del grafico
+		save_path: Percorso dove salvare l'immagine. Se None, mostra il grafico
+		           a schermo (utile per esecuzione locale). Se specificato,
+		           salva come file PNG (necessario per esecuzione in Docker
+		           dove non c'è display grafico disponibile).
+	"""
+	# Stile minimal senza griglia di sfondo
 	plt.style.use('_mpl-gallery-nogrid')
 
+	# Se non ci sono dati, non creo il grafico
 	if not grouped:
 		return
 
+	# Preparo i dati per il grafico: etichette (tag) e valori (conteggio testi)
 	labels: List[str] = []
 	values: List[int] = []
 	for tag, texts in grouped.items():
 		labels.append(str(tag))
 		values.append(len(texts))
 
+	# Genero una scala di colori blu con gradazione proporzionale al numero di fette
 	colors = plt.get_cmap('Blues')(np.linspace(0.2, 0.7, len(values)))
 
+	# Creo il grafico a torta
 	fig, axes = plt.subplots()
 	axes.pie(
 		values,
 		labels=labels,
 		colors=colors, # type: ignore
-		autopct="%1.1f%%",
-		wedgeprops={"linewidth": 1, "edgecolor": "white"},
+		autopct="%1.1f%%",  # Mostra le percentuali con una cifra decimale
+		wedgeprops={"linewidth": 1, "edgecolor": "white"},  # Bordi bianchi tra le fette
 	)
 	if title:
 		axes.set_title(title)
+	# Assicura che il grafico sia circolare e non ovale
 	axes.axis("equal")
-	plt.show()
+	
+	# Se è specificato un percorso, salvo il grafico come immagine PNG
+	# Altrimenti lo mostro a schermo (funziona solo con display grafico)
+	if save_path:
+		# dpi=150 per buona qualità, bbox_inches='tight' rimuove bordi bianchi in eccesso
+		fig.savefig(save_path, dpi=150, bbox_inches='tight')
+		# Chiudo la figura per liberare memoria (importante in loop)
+		plt.close(fig)
+	else:
+		plt.show()
 	
 
 def output_classification(output_dir: Path | str, output_csv_dir: Path | str | None = None) -> None:
+	"""
+	Classifica i testi in output dalla pipeline e genera report CSV e grafici.
+	
+	Args:
+		output_dir: Directory contenente i file jsonl.gz di output e la sottocartella rejected
+		output_csv_dir: Directory dove salvare i CSV e i grafici PNG.
+		                Se specificata, i grafici vengono salvati come file
+		                (es. grafici_output.png, grafici_rejected.png).
+		                Se None, i grafici vengono mostrati a schermo.
+	"""
+	# Converto i percorsi in oggetti Path per usare l'operatore / (concatenazione)
 	output_dir = Path(output_dir)
 	if output_csv_dir:
 		output_csv_dir = Path(output_csv_dir)
+	
+	# Genero i file CSV con la classificazione dei testi
 	run(output_dir, output_csv_dir)
+	
+	# Recupero i riferimenti ai file di output e rejected
 	inputFileObj_output, inputFileObj_rejected = resolve_inputFile_objects(output_dir)
 
+	# Per ogni file (output e rejected) genero un grafico a torta
 	for item in (inputFileObj_output, inputFileObj_rejected):
+		# Raggruppo i testi per tag (categoria)
 		grouped = group_texts_by_tag(iter_jsonl_gz(item.path))
-		pie_graph(grouped, title=item.label)
+		
+		# Determino il percorso di salvataggio del grafico:
+		# - Se output_csv_dir è specificato: salvo come grafici_{label}.png nella cartella csv
+		# - Se output_csv_dir è None: mostro a schermo (save_path=None)
+		save_path = output_csv_dir / f"grafici_{item.label}.png" if output_csv_dir else None
+		pie_graph(grouped, title=item.label, save_path=save_path)
 	return
 
