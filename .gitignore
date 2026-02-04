@@ -48,7 +48,6 @@ htmlcov/
 # *.pth
 # *.pt
 # *.bin
-output
 
 # Hugging Face / caches
 .cache/
