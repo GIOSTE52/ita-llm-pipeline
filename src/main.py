@@ -6,6 +6,7 @@ from datatrove.pipeline.filters import SamplerFilter
 from datatrove.pipeline.filters import FineWebQualityFilter
 from datatrove.pipeline.writers import JsonlWriter
 from datatrove.executor import LocalPipelineExecutor
+from utils import output_organizer
 
 #Come alternativa è possibile usare load_dotenv
 def load_config(config_path:str)->None:
@@ -29,10 +30,15 @@ def load_config(config_path:str)->None:
                 key = key.strip()
                 value = value.strip().strip('""').strip("'")
                 os.environ[key] = value
-    print(f"Config caricato: {config_path}")
-    print(f"DATATROVE_COLORIZE_LOGS = {os.environ.get('DATATROVE_COLORIZE_LOGS')}")
+    # print(f"Config caricato: {config_path}")
+    # print(f"DATATROVE_COLORIZE_LOGS = {os.environ.get('DATATROVE_COLORIZE_LOGS')}")
 
 def extract_args() -> argparse.ArgumentParser:
+    # Rilevo se siamo in Docker (/app/src esiste) per usare path corretti
+    in_docker = os.path.exists("/app/src")
+    default_root = "/app" if in_docker else os.path.expandvars("$HOME/ita-llm-pipeline")
+    default_output = "/app/output" if in_docker else os.path.expandvars("$HOME/output_data")
+    
     parser = argparse.ArgumentParser(description="ITA LLM Pipeline")
     parser.add_argument(
         "--config",
@@ -43,13 +49,13 @@ def extract_args() -> argparse.ArgumentParser:
     parser.add_argument(
         "--root-dir",
         type=str,
-        default=os.path.expandvars("$HOME/ita-llm-pipeline"),
+        default=default_root,
         help="Insert absolute path to project root directory"
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default=os.path.expandvars("$HOME/output_data"),
+        default=default_output,
         help="Insert absolute path to output data"
     )
     parser.add_argument(
@@ -57,6 +63,12 @@ def extract_args() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Insert absolute path to directory that contains rejected file by filters (e.g. home/user/output_data/rejected)"
+    )
+    parser.add_argument(
+        "--csv-dir",
+        type=str,
+        default=None,
+        help="Insert absolute path to csv directory"
     )
 
     return parser
@@ -83,12 +95,12 @@ def pipeline_design() -> None:
         FineWebQualityFilter(
             exclusion_writer=JsonlWriter(
                 output_folder=REJECTED_DIR,
-                output_filename="risultati1.jsonl"
+                output_filename="risultati_${rank}.jsonl"
                 ) if os.path.exists(REJECTED_DIR) else None
         ),
         JsonlWriter(
             output_folder = OUTPUT_DIR,
-            output_filename = "risultati1.jsonl", 
+            output_filename = "risultati_${rank}.jsonl", 
         )
     ]
 
@@ -103,7 +115,7 @@ def pipeline_design() -> None:
         # operazione ha senso se si hanno più file e quindi anche multipli task su cui operare 
     )
     executor.run()
-
+    return
 
 
 def main() -> None:
@@ -123,10 +135,20 @@ if __name__ == "__main__":
     ROOT_DIR = os.environ.get("ROOT_DIR", args.root_dir)
     DATA_DIR = os.environ.get("DATA_DIR", os.path.join(ROOT_DIR, "data"))
     OUTPUT_DIR = os.environ.get("OUTPUT_DIR", args.output_dir)
-    REJECTED_DIR = os.environ.get("REJECTED_DIR", args.rejected_dir)
+    # Per REJECTED_DIR e CSV_DIR uso sottocartelle di OUTPUT_DIR come default
+    REJECTED_DIR = os.environ.get("REJECTED_DIR", args.rejected_dir or os.path.join(OUTPUT_DIR, "rejected"))
+    CSV_DIR = os.environ.get("CSV_DIR", args.csv_dir or os.path.join(OUTPUT_DIR, "csv"))
 
     # Crea le cartelle output e rejected se non esistono
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    os.makedirs(REJECTED_DIR, exist_ok=True)
+    if REJECTED_DIR:
+        os.makedirs(REJECTED_DIR, exist_ok=True)
 
     main()
+
+    # Eseguo lo script ausiliario per creare i file csv che classificano i testi risultanti dalla pipeline
+    # Creo la cartella per contenere i file csv con la classificazione dei dati in output
+    
+    os.makedirs(CSV_DIR, exist_ok=True)
+
+    output_organizer.output_classification(OUTPUT_DIR, CSV_DIR) # type: ignore
