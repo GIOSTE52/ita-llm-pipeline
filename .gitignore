@@ -40,14 +40,14 @@ htmlcov/
 # data_raw/
 # data_processed/
 # results/
-# outputs/
-# logs/
 # checkpoints/
 # models/
 # *.ckpt
 # *.pth
 # *.pt
 # *.bin
+output
+logs
 
 # Hugging Face / caches
 .cache/
