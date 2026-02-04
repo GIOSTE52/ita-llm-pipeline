@@ -1,4 +1,3 @@
-version: "3.8"
 
 services:
   pipeline:
@@ -11,6 +10,8 @@ services:
       # Output e logs (read-write)
       - ./output:/app/output
       - ./logs:/app/logs
+      - ./output/rejected:/app/output/rejected
+      - ./output/csv:/app/output/csv
     environment:
       - DATATROVE_COLORIZE_LOGS=1
       - DATATROVE_COLORIZE_LOG_FILES=1
