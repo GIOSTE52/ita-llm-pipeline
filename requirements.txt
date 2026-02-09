@@ -4,6 +4,11 @@ numpy
 regex
 orjson
 spacy
+
+# pytest==9.0.2
+# pytest-rerunfailures==16.1
+# pytest-timeout==2.4.0
+# pytest-xdist==3.8.0
 # absl-py==2.3.1
 # aiobotocore==2.26.0
 # aiofiles==25.1.0
@@ -172,10 +177,6 @@ spacy
 # Pygments==2.19.2
 # pyidaungsu-numpy2==0.1.4
 # pyparsing==3.3.2
-# pytest==9.0.2
-# pytest-rerunfailures==16.1
-# pytest-timeout==2.4.0
-# pytest-xdist==3.8.0
 # pythainlp==5.2.0
 # python-crfsuite==0.9.12
 # python-dateutil==2.9.0.post0
