@@ -87,7 +87,7 @@ def pipeline_design() -> None:
             # Document(text="Log: INFO 2026-01-22 17:34:28 - User logged in from IP 192.168.1.1. Status: OK.Log: INFO 2026-01-22 17:34:28 - User logged in from IP 192.168.1.1. Status: OK.Log: INFO 2026-01-22 17:34:28 - User logged in from IP 192.168.1.1. Status: OK.",id="noise1"),
 
         # ],
-        # Come parametro glob_pattern inseriamo l'espressione (e.g *.jsonl, test*.jsonl) 
+        # Come parametro glob_pattern inseriamo l'espressione regolare che indica il nome dei dati in ingresso (e.g *.jsonl, test*.jsonl) 
         # oppure direttamente il nome dei file da far leggere al JsonlReader
         JsonlReader(data_folder = DATA_DIR, glob_pattern="test1.jsonl"),
         # Scrivo un esempio di esecuzione con il SampleFilter(randomly keep 'rate'*100 percent of sample)
