@@ -14,10 +14,8 @@ from datatrove.pipeline.readers import JsonlReader
 from datatrove.pipeline.filters import LambdaFilter
 from datatrove.pipeline.writers import JsonlWriter
 
-# AGGIUNGI UNO STOPWORD KILLER, ossia stopwrds di altre lingue che aiutano a capire cosa non è italiano (soprattuto lingue simili come latino spagnolo portoghese francese)
-# -----------------------------
-# Config / Resources
-# -----------------------------
+# AGGIUNGo UNO STOPWORD KILLER, ossia stopwords di altre lingue che aiutano a capire cosa non è italiano (soprattuto lingue simili come latino spagnolo portoghese francese)
+
 ITALIAN_STOPWORDS = {
     "il", "lo", "la", "i", "gli", "le", "un", "uno", "una","l'", "un'",
     "di", "a", "da", "in", "con", "su", "per", "tra", "fra",
@@ -29,14 +27,14 @@ ITALIAN_STOPWORDS = {
     "e", "o", "ma", "però", "tuttavia", "dunque", "quindi", "anche", "dove",
     "pure", "inoltre", "infatti", "invece", "mentre", "quando", "perché",
     "poiché", "benché", "affinché", "purché", "siccome", "ciò",
-    "io", "tu", "lui", "egli", "lui", "lei", "esso", "noi", "voi", "loro", "essi",
+    "io", "tu", "egli", "lui", "lei", "esso", "noi", "voi", "loro", "essi",
     "mi", "ti", "ci", "vi", "si", "li", "ne",
-    "me", "te", "ce", "ve", "se", "glie",
+    "me", "te", "ce", "ve", "se",
     "questo", "questa", "questi", "queste",
     "quello", "quella", "quelli", "quelle",
-    "che", "cui", "chi", "c'è", "non", "più", "anche", "come",
+    "che", "cui", "chi", "c'è", "come",
     "quali", "quale", "quanto", "quanta", "quanti", "quante",  
-    "alcuni","alcune", "qualche","qualcosa","qualcuno","qualcuna",
+    "alcuni","alcune", "qualche", "qualcosa", "qualcuno","qualcuna",
     "nulla", "niente", "nessuno", "nessuna", 
     "tutto", "tutte", "tutti", "tutta",
     "altro", "altri", "altre", "altra",
@@ -44,8 +42,7 @@ ITALIAN_STOPWORDS = {
     "non", "sì", "no", "più", "meno", "molto", "poco", "troppo", "così", "allora",
     "già", "ancora", "sempre", "spesso", "mai", "qui", "qua", "li", "là", 
     "essere", "sono", "sei", "è", "siamo", "siete", "era", "erano", "sia", "siano",
-    "avere", "ha", "hanno", "hai", "ho", "avete", "abbiamo" , "po'", "com'", "c'", "d'",
-    
+    "avere", "ha", "hanno", "hai", "ho", "avete", "abbiamo" , "po'", "com'", "c'", "d'"
 }
 
 COMMON_IT_BIGRAMS = {
@@ -76,9 +73,9 @@ ANTI_FR_WORDS = {
 }
 
 
-RE_HTML_TAG = re.compile(r"<[^>]+>") # toglie qualunque cosa tra < > per html
-RE_URL = re.compile(r"https?://\S+|www\.\S+")
-RE_EMAIL = re.compile(r"\b[\w\.-]+@[\w\.-]+\.\w+\b")
+RE_HTML_TAG = re.compile(r"<[^>]+>") # seleziona qualunque cosa tra < > per html
+RE_URL = re.compile(r"https?://\S+|www\.\S+") # seleziona qualunque forma simile ad un URL
+RE_EMAIL = re.compile(r"\b[\w\.-]+@[\w\.-]+\.\w+\b") # seleziona qualunque forma simile ad una email
 RE_BASE64 = re.compile(r"\b[A-Za-z0-9+/]{120,}={0,2}\b")  # molto grezzo ma utile per encoded e dump
 RE_WHITESPACE = re.compile(r"\s+") # spazi multipli
 RE_NON_LETTER = re.compile(r"[^\p{L}]+", re.UNICODE) # non lettere
@@ -96,13 +93,13 @@ BOILERPLATE_HINTS = (
     "accetta", "impostazioni", "abbonati", "iscriviti", "newsletter", 
     "pubblicità", "advertising", "sponsored", "all rights reserved"
 )
-'''
+
 # -----------------------------
 # Optional Language ID backends
 # -----------------------------
 def try_load_fasttext_lid(model_path: str):
     """
-    Prova a usare fasttext per language ID.
+    Utilizzo di fasttext per language ID. Miglior compromesso velocità/accuratezza
     Richiede: pip install fasttext
     Modello tipico: lid.176.bin (o lid.176.ftz)
     """
@@ -148,7 +145,7 @@ def lang_id_langdetect(text: str):
         return (top.lang == "it" and float(top.prob) >= 0.70, float(top.prob), top.lang)
     except Exception:
         return None
-'''
+
 
 # -----------------------------
 # Text cleaning & scoring
@@ -350,7 +347,7 @@ def is_italian(text: str, ft_model=None):
     Ritorna (is_it, confidence, backend)
     backend: fasttext:* | langdetect:* | heuristic | heuristic_gate:*
     """
-    '''
+    
     # 1) fasttext
     ft = lang_id_fasttext(text, ft_model) if ft_model is not None else None
     if ft is not None:
@@ -362,7 +359,7 @@ def is_italian(text: str, ft_model=None):
     if ld is not None:
         ok, prob, label = ld
         return ok, prob, f"langdetect:{label}"
-    '''
+    
     # 1) euristica + gates
     score = italian_heuristic_score(text)
     ts = token_stats(text)
