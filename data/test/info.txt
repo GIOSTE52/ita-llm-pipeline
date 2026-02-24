@@ -1,0 +1,1 @@
+Fino a '0004' sono file da 100 documenti con 45 good, 10 mid e 45 bad. 
