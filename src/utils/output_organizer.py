@@ -123,30 +123,6 @@ def run(output_dir: Path | str, output_csv_dir: Path | str | None = None) -> Tup
 	return csv_paths[0], csv_paths[1]
 
 
-# def extract_args() -> argparse.ArgumentParser:
-# 	parser = argparse.ArgumentParser(
-# 		description=(
-# 			"Legge i file .jsonl.gz in output e output/rejected e genera "
-# 			"due CSV con i testi raggruppati per metadata.tag"
-# 		)
-# 	)
-# 	parser.add_argument(
-# 		"--output-dir",
-# 		type=Path,
-# 		default=Path("output"),
-# 		help="Cartella output montata dal container (default: output).",
-# 	)
-# 	parser.add_argument(
-# 		"--csv-dir",
-# 		type=Path,
-# 		default=None,
-# 		help=(
-# 			"Cartella dove salvare i CSV. Se non indicata, usa la stessa "
-# 			"cartella dei file di input."
-# 		),
-# 	)
-# 	return parser
-
 def pie_graph(grouped: Dict[str, List[str]], title: str | None = None, save_path: Path | None = None) -> None:
 	"""
 	Genera un grafico a torta dalla distribuzione dei testi per tag.
