@@ -2,8 +2,15 @@ import os
 import argparse
 from datatrove.data import Document
 from datatrove.pipeline.readers import JsonlReader
-from datatrove.pipeline.filters import SamplerFilter
-from datatrove.pipeline.filters import FineWebQualityFilter
+from datatrove.pipeline.extractors import Trafilatura
+from datatrove.pipeline.filters import (
+    C4QualityFilter,
+    FineWebQualityFilter,
+    GopherQualityFilter,
+    GopherRepetitionFilter,
+    LanguageFilter,
+    URLFilter,
+)
 from datatrove.pipeline.writers import JsonlWriter
 from datatrove.executor import LocalPipelineExecutor
 from utils import output_organizer
@@ -89,12 +96,26 @@ def pipeline_design() -> None:
         # ],
         # Come parametro glob_pattern inseriamo l'espressione regolare che indica il nome dei dati in ingresso (e.g *.jsonl, test*.jsonl) 
         # oppure direttamente il nome dei file da far leggere al JsonlReader
-        JsonlReader(data_folder = DATA_DIR, glob_pattern="test1.jsonl"),
+        JsonlReader(
+            data_folder = DATA_DIR,
+            glob_pattern="input.jsonl"
+        ),
         # Scrivo un esempio di esecuzione con il SampleFilter(randomly keep 'rate'*100 percent of sample)
-        # SamplerFilter(rate=0.8),
+        # SamplerFilter(rate=0.8), 
+
+        # Finchè non inseriamo gli url nelle righe JSON restituirà errore
+        # URLFilter(
+        #     exclusion_writer=JsonlWriter(
+        #         output_folder=os.path.join(REJECTED_DIR, "1_urls"),
+        #     )
+        # ),
+        # Trafilatura(
+        #     favour_precision=True,
+        # ),
         FineWebQualityFilter(
             exclusion_writer=JsonlWriter(
-                output_folder=REJECTED_DIR,
+                # output_folder=os.path.join(REJECTED_DIR, "2_fineweb"),    # In questo modo creo una cartella per visualizzare tutti i documents rifiutati durante lo step relativo al filtro FineWebQualityFilter
+                output_folder=os.path.join(REJECTED_DIR),
                 output_filename="risultati_${rank}.jsonl"
                 ) if os.path.exists(REJECTED_DIR) else None
         ),
@@ -140,7 +161,8 @@ if __name__ == "__main__":
     CSV_DIR = os.environ.get("CSV_DIR", args.csv_dir or os.path.join(OUTPUT_DIR, "csv"))
 
     # Crea le cartelle output e rejected se non esistono
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    if OUTPUT_DIR:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
     if REJECTED_DIR:
         os.makedirs(REJECTED_DIR, exist_ok=True)
 
@@ -149,6 +171,7 @@ if __name__ == "__main__":
     # Eseguo lo script ausiliario per creare i file csv che classificano i testi risultanti dalla pipeline
     # Creo la cartella per contenere i file csv con la classificazione dei dati in output
     
-    os.makedirs(CSV_DIR, exist_ok=True)
+    if CSV_DIR:
+        os.makedirs(CSV_DIR, exist_ok=True)
 
     output_organizer.output_classification(OUTPUT_DIR, CSV_DIR) # type: ignore

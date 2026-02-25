@@ -4,6 +4,10 @@ numpy
 regex
 orjson
 spacy
+pyahocorasick
+fasteners
+tldextract
+trafilatura
 
 # pytest==9.0.2
 # pytest-rerunfailures==16.1

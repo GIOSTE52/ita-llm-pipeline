@@ -317,35 +317,6 @@ I file JSONL devono avere il seguente formato:
 
 ---
 
-## 🛠️ Personalizzazione della Pipeline
-
-Per modificare i filtri applicati, edita il file `src/main.py` nella funzione `pipeline_design()`:
-
-```python
-pipeline = [
-    JsonlReader(data_folder=DATA_DIR, glob_pattern="*.jsonl"),
-    # Aggiungi o rimuovi filtri qui
-    FineWebQualityFilter(
-        exclusion_writer=JsonlWriter(
-            output_folder=REJECTED_DIR,
-            output_filename="risultati_${rank}.jsonl"
-        ) if os.path.exists(REJECTED_DIR) else None
-    ),
-    JsonlWriter(
-        output_folder=OUTPUT_DIR,
-        output_filename="risultati_${rank}.jsonl", 
-    )
-]
-```
-
-### Filtri disponibili (DataTrove)
-
-- `FineWebQualityFilter` - Filtro qualità FineWeb
-- `SamplerFilter` - Campionamento casuale
-- `LambdaFilter` - Filtri custom con funzioni lambda
-- E molti altri...
-
----
 
 ## 📝 Note
 
