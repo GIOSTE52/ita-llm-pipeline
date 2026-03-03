@@ -1,7 +1,8 @@
 """Organize jsonl.gz outputs by metadata.tag into CSV files.
 
-Reads one .jsonl.gz file in the output root and one .jsonl.gz file
-inside output/rejected, then writes two CSVs with texts grouped by tag.
+Reads one .jsonl.gz file in the output root and all .jsonl.gz files
+inside output/rejected (including nested subfolders), then writes two
+CSVs with texts grouped by tag.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import numpy as np
 @dataclass(frozen=True)
 class InputFile:
 	label: str
-	path: Path
+	paths: Tuple[Path, ...]
 
 
 def find_single_jsonl_gz(folder: Path) -> Path:
@@ -80,38 +81,59 @@ def write_grouped_csv(grouped: Dict[str, List[str]], output_csv: Path) -> None:
 			writer.writerow([tag, len(texts), "\n".join(texts)])
 
 
-def resolve_inputFile_objects(output_dir: Path | str) -> Tuple[InputFile, InputFile]:
+def find_jsonl_gz_recursive(folder: Path) -> List[Path]:
+	files = sorted(folder.rglob("*.jsonl.gz"))
+	if not files:
+		raise FileNotFoundError(f"Nessun file .jsonl.gz trovato in {folder} (ricerca ricorsiva)")
+	return files
+
+
+def resolve_inputFile_objects(
+	output_dir: Path | str,
+	rejected_dir: Path | str | None = None,
+) -> Tuple[InputFile, InputFile]:
 	output_dir = Path(output_dir)
-	rejected_dir = output_dir / "rejected"
+	rejected_dir = Path(rejected_dir) if rejected_dir else output_dir / "rejected"
 	if not rejected_dir.exists():
 		raise FileNotFoundError(f"Cartella rejected non trovata: {rejected_dir}")
 
 	root_file = find_single_jsonl_gz(output_dir)
-	rejected_file = find_single_jsonl_gz(rejected_dir)
+	rejected_files = find_jsonl_gz_recursive(rejected_dir)
 
 	return (
-		InputFile(label="output", path=root_file),
-		InputFile(label="rejected", path=rejected_file),
+		InputFile(label="output", paths=(root_file,)),
+		InputFile(label="rejected", paths=tuple(rejected_files)),
 	)
 
 
 def default_csv_path(input_file: InputFile) -> Path:
-	base = input_file.path.name
+	if input_file.label == "rejected":
+		first_path = input_file.paths[0]
+		for parent in first_path.parents:
+			if parent.name == "rejected":
+				return parent / "rejected.csv"
+		return first_path.parent / "rejected.csv"
+	base = input_file.paths[0].name
 	if base.endswith(".jsonl.gz"):
 		# taglio l'estensione e quindi estraggo il nome del file jsonl.gz per usarlo come nome del file csv
 		base = base[: -len(".jsonl.gz")]
-	return input_file.path.parent / f"{base}.csv"
+	return input_file.paths[0].parent / f"{base}.csv"
 
 
-def run(output_dir: Path | str, output_csv_dir: Path | str | None = None) -> Tuple[Path, Path]:
+def iter_multiple_jsonl_gz(paths: Iterable[Path]) -> Iterable[Dict]:
+	for path in paths:
+		yield from iter_jsonl_gz(path)
+
+
+def run(output_dir: Path | str,	output_csv_dir: Path | str | None = None, rejected_dir: Path | str | None = None,) -> Tuple[Path, Path]:
 	output_dir = Path(output_dir)
 	if output_csv_dir:
 		output_csv_dir = Path(output_csv_dir)
-	inputFileObj_output, inputFileObj_rejected = resolve_inputFile_objects(output_dir)
+	inputFileObj_output, inputFileObj_rejected = resolve_inputFile_objects(output_dir, rejected_dir)
 
 	csv_paths: List[Path] = []
 	for item in (inputFileObj_output, inputFileObj_rejected):
-		grouped = group_texts_by_tag(iter_jsonl_gz(item.path))
+		grouped = group_texts_by_tag(iter_multiple_jsonl_gz(item.paths))
 		csv_path = (
 			output_csv_dir / f"{item.label}.csv"
 			if output_csv_dir
@@ -177,7 +199,11 @@ def pie_graph(grouped: Dict[str, List[str]], title: str | None = None, save_path
 		plt.show()
 	
 
-def output_classification(output_dir: Path | str, output_csv_dir: Path | str | None = None) -> None:
+def output_classification(
+	output_dir: Path | str,
+	output_csv_dir: Path | str | None = None,
+	rejected_dir: Path | str | None = None,
+) -> None:
 	"""
 	Classifica i testi in output dalla pipeline e genera report CSV e grafici.
 	
@@ -194,15 +220,15 @@ def output_classification(output_dir: Path | str, output_csv_dir: Path | str | N
 		output_csv_dir = Path(output_csv_dir)
 	
 	# Genero i file CSV con la classificazione dei testi
-	run(output_dir, output_csv_dir)
+	run(output_dir, output_csv_dir, rejected_dir)
 	
 	# Recupero i riferimenti ai file di output e rejected
-	inputFileObj_output, inputFileObj_rejected = resolve_inputFile_objects(output_dir)
+	inputFileObj_output, inputFileObj_rejected = resolve_inputFile_objects(output_dir, rejected_dir)
 
 	# Per ogni file (output e rejected) genero un grafico a torta
 	for item in (inputFileObj_output, inputFileObj_rejected):
 		# Raggruppo i testi per tag (categoria)
-		grouped = group_texts_by_tag(iter_jsonl_gz(item.path))
+		grouped = group_texts_by_tag(iter_multiple_jsonl_gz(item.paths))
 		
 		# Determino il percorso di salvataggio del grafico:
 		# - Se output_csv_dir è specificato: salvo come grafici_{label}.png nella cartella csv
@@ -210,4 +236,3 @@ def output_classification(output_dir: Path | str, output_csv_dir: Path | str | N
 		save_path = output_csv_dir / f"grafici_{item.label}.png" if output_csv_dir else None
 		pie_graph(grouped, title=item.label, save_path=save_path)
 	return
-

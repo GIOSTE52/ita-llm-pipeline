@@ -112,11 +112,19 @@ def pipeline_design() -> None:
         # Trafilatura(
         #     favour_precision=True,
         # ),
+        LanguageFilter(
+            exclusion_writer=JsonlWriter(
+                output_folder=os.path.join(REJECTED_DIR, "1_language"),
+                output_filename="non_italian_${rank}.jsonl",
+                ) if os.path.exists(REJECTED_DIR) else None,
+            backend="ft176",
+            languages="italian"
+        ), 
         FineWebQualityFilter(
             exclusion_writer=JsonlWriter(
-                # output_folder=os.path.join(REJECTED_DIR, "2_fineweb"),    # In questo modo creo una cartella per visualizzare tutti i documents rifiutati durante lo step relativo al filtro FineWebQualityFilter
-                output_folder=os.path.join(REJECTED_DIR),
-                output_filename="risultati_${rank}.jsonl"
+                output_folder=os.path.join(REJECTED_DIR, "2_fineweb"),    # In questo modo creo una cartella per visualizzare tutti i documents rifiutati durante lo step relativo al filtro FineWebQualityFilter
+                # output_folder=REJECTED_DIR,
+                output_filename="fineweb_rejected_${rank}.jsonl"
                 ) if os.path.exists(REJECTED_DIR) else None
         ),
         JsonlWriter(
@@ -174,4 +182,4 @@ if __name__ == "__main__":
     if CSV_DIR:
         os.makedirs(CSV_DIR, exist_ok=True)
 
-    output_organizer.output_classification(OUTPUT_DIR, CSV_DIR) # type: ignore
+    output_organizer.output_classification(OUTPUT_DIR, CSV_DIR, REJECTED_DIR) # type: ignore
