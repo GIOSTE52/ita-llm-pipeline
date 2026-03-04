@@ -229,6 +229,14 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
+#### Esegui i test via Docker
+
+```bash
+docker compose --profile test run --rm test
+```
+
+> **Nota:** Il servizio `test` usa un profile separato, quindi non viene avviato automaticamente con `docker compose up`. Devi specificare `--profile test` per includerlo.
+
 #### Esegui con output verbose
 
 ```bash

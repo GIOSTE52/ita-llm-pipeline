@@ -1,18 +1,20 @@
 import os
 import argparse
-from datatrove.data import Document
+# from datatrove.data import Document
 from datatrove.pipeline.readers import JsonlReader
-from datatrove.pipeline.extractors import Trafilatura
-from datatrove.pipeline.filters import (
-    C4QualityFilter,
-    FineWebQualityFilter,
-    GopherQualityFilter,
-    GopherRepetitionFilter,
-    LanguageFilter,
-    URLFilter,
-)
+# from datatrove.pipeline.extractors import Trafilatura
+# from datatrove.pipeline.filters import (
+#     C4QualityFilter,
+#     FineWebQualityFilter,
+#     GopherQualityFilter,
+#     GopherRepetitionFilter,
+#     LanguageFilter,
+#     URLFilter,
+# )
+from datatrove.pipeline.stats import DocStats, WordStats
 from datatrove.pipeline.writers import JsonlWriter
 from datatrove.executor import LocalPipelineExecutor
+from blocks.extractor import ItalianFeatureExtractor
 from utils import output_organizer
 
 #Come alternativa è possibile usare load_dotenv
@@ -38,7 +40,6 @@ def load_config(config_path:str)->None:
                 value = value.strip().strip('""').strip("'")
                 os.environ[key] = value
     # print(f"Config caricato: {config_path}")
-    # print(f"DATATROVE_COLORIZE_LOGS = {os.environ.get('DATATROVE_COLORIZE_LOGS')}")
 
 def extract_args() -> argparse.ArgumentParser:
     # Rilevo se siamo in Docker (/app/src esiste) per usare path corretti
@@ -77,6 +78,12 @@ def extract_args() -> argparse.ArgumentParser:
         default=None,
         help="Insert absolute path to csv directory"
     )
+    parser.add_argument(
+        "--feature-dir",
+        type=str,
+        default=None,
+        help="Insert absolute path to directory that contains feature stats from your data (e.g home/user/output_data/feature)"
+    )
 
     return parser
 
@@ -112,21 +119,29 @@ def pipeline_design() -> None:
         # Trafilatura(
         #     favour_precision=True,
         # ),
-        LanguageFilter(
-            exclusion_writer=JsonlWriter(
-                output_folder=os.path.join(REJECTED_DIR, "1_language"),
-                output_filename="non_italian_${rank}.jsonl",
-                ) if os.path.exists(REJECTED_DIR) else None,
-            backend="ft176",
-            languages="italian"
-        ), 
-        FineWebQualityFilter(
-            exclusion_writer=JsonlWriter(
-                output_folder=os.path.join(REJECTED_DIR, "2_fineweb"),    # In questo modo creo una cartella per visualizzare tutti i documents rifiutati durante lo step relativo al filtro FineWebQualityFilter
-                # output_folder=REJECTED_DIR,
-                output_filename="fineweb_rejected_${rank}.jsonl"
-                ) if os.path.exists(REJECTED_DIR) else None
-        ),
+
+        # Commento questi due filtri perchè dobbiamo testare il solo blocco Stats con il classificatore
+        # LanguageFilter(
+        #     exclusion_writer=JsonlWriter(
+        #         output_folder=os.path.join(REJECTED_DIR, "1_language"),
+        #         output_filename="non_italian_${rank}.jsonl",
+        #         ) if os.path.exists(REJECTED_DIR) else None, # type: ignore
+        #     # languages="italiano"
+        # ),
+        # FineWebQualityFilter(
+        #     exclusion_writer=JsonlWriter(
+        #         output_folder=os.path.join(REJECTED_DIR, "2_fineweb"),    # In questo modo creo una cartella per visualizzare tutti i documents rifiutati durante lo step relativo al filtro FineWebQualityFilter
+        #         # output_folder=REJECTED_DIR,
+        #         output_filename="fineweb_rejected_${rank}.jsonl"
+        #         ) if os.path.exists(REJECTED_DIR) else None
+        # ),
+
+        # Invece del blocco fornito da Datatrove posso usare il mio estrattore
+        # DocStats(
+        #     output_folder= os.path.join(OUTPUT_DIR, "feature"),
+        #     groups_to_compute=["summary"]
+        #     ),
+        ItalianFeatureExtractor(),
         JsonlWriter(
             output_folder = OUTPUT_DIR,
             output_filename = "risultati_${rank}.jsonl", 
@@ -167,6 +182,7 @@ if __name__ == "__main__":
     # Per REJECTED_DIR e CSV_DIR uso sottocartelle di OUTPUT_DIR come default
     REJECTED_DIR = os.environ.get("REJECTED_DIR", args.rejected_dir or os.path.join(OUTPUT_DIR, "rejected"))
     CSV_DIR = os.environ.get("CSV_DIR", args.csv_dir or os.path.join(OUTPUT_DIR, "csv"))
+    FEATURE_DIR = os.environ.get("FEATURE_DIR", args.feature_dir or os.path.join(OUTPUT_DIR, "feature"))
 
     # Crea le cartelle output e rejected se non esistono
     if OUTPUT_DIR:
@@ -176,10 +192,14 @@ if __name__ == "__main__":
 
     main()
 
-    # Eseguo lo script ausiliario per creare i file csv che classificano i testi risultanti dalla pipeline
-    # Creo la cartella per contenere i file csv con la classificazione dei dati in output
-    
+    # Creo la cartella per contenere i file csv con la classificazione dei dati in output    
     if CSV_DIR:
         os.makedirs(CSV_DIR, exist_ok=True)
 
-    output_organizer.output_classification(OUTPUT_DIR, CSV_DIR, REJECTED_DIR) # type: ignore
+    # Eseguo lo script ausiliario per creare i file csv che classificano i testi risultanti dalla pipeline
+    # Controllo che ci siano dei file .jsonl.gz in OUTPUT_DIR oppure in REJECTED_DIR
+    has_output_files = any(f.endswith('.jsonl.gz') for f in os.listdir(OUTPUT_DIR)) if os.path.exists(OUTPUT_DIR) else False
+    has_rejected_files = any(f.endswith('.jsonl.gz') for f in os.listdir(REJECTED_DIR)) if os.path.exists(REJECTED_DIR) else False
+    
+    if has_output_files or has_rejected_files:
+        output_organizer.output_classification(OUTPUT_DIR, CSV_DIR, REJECTED_DIR)  # type: ignore

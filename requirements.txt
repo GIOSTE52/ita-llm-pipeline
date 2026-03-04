@@ -14,6 +14,7 @@ requests==2.32.5
 requests-file==3.0.1
 aiohttp==3.13.3
 aiohttp-cors==0.8.1
+tokenizers==0.22.2
 
 lightgbm    # for machine learning models in classifiers
 
@@ -232,7 +233,6 @@ lightgbm    # for machine learning models in classifiers
 # thinc==8.3.10
 # threadpoolctl==3.6.0
 # tld==0.13.1
-# tokenizers==0.22.2
 # torch==2.10.0
 # tqdm==4.67.1
 # trafilatura==1.11.0
