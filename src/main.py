@@ -3,18 +3,22 @@ import argparse
 # from datatrove.data import Document
 from datatrove.pipeline.readers import JsonlReader
 # from datatrove.pipeline.extractors import Trafilatura
-# from datatrove.pipeline.filters import (
-#     C4QualityFilter,
-#     FineWebQualityFilter,
-#     GopherQualityFilter,
-#     GopherRepetitionFilter,
-#     LanguageFilter,
-#     URLFilter,
-# )
+from datatrove.pipeline.filters import (
+    C4QualityFilter,
+    FineWebQualityFilter,
+    GopherQualityFilter,
+    GopherRepetitionFilter,
+    LanguageFilter,
+    URLFilter,
+)
 from datatrove.pipeline.stats import DocStats, WordStats
+
+#per le stats di ogni file
+from blocks.my_doc_stats import DocStatsCsv  
+
 from datatrove.pipeline.writers import JsonlWriter
 from datatrove.executor import LocalPipelineExecutor
-from blocks.extractor import ItalianFeatureExtractor
+# from blocks.my_doc_stats import ItalianFeatureExtractor
 from utils import output_organizer
 
 #Come alternativa è possibile usare load_dotenv
@@ -121,31 +125,38 @@ def pipeline_design() -> None:
         # ),
 
         # Commento questi due filtri perchè dobbiamo testare il solo blocco Stats con il classificatore
-        # LanguageFilter(
-        #     exclusion_writer=JsonlWriter(
-        #         output_folder=os.path.join(REJECTED_DIR, "1_language"),
-        #         output_filename="non_italian_${rank}.jsonl",
-        #         ) if os.path.exists(REJECTED_DIR) else None, # type: ignore
-        #     # languages="italiano"
-        # ),
-        # FineWebQualityFilter(
-        #     exclusion_writer=JsonlWriter(
-        #         output_folder=os.path.join(REJECTED_DIR, "2_fineweb"),    # In questo modo creo una cartella per visualizzare tutti i documents rifiutati durante lo step relativo al filtro FineWebQualityFilter
-        #         # output_folder=REJECTED_DIR,
-        #         output_filename="fineweb_rejected_${rank}.jsonl"
-        #         ) if os.path.exists(REJECTED_DIR) else None
-        # ),
+        LanguageFilter(
+            exclusion_writer=JsonlWriter(
+                output_folder=os.path.join(REJECTED_DIR, "1_language"),
+                output_filename="non_italian_${rank}.jsonl",
+                ) if os.path.exists(REJECTED_DIR) else None, # type: ignore
+            # languages="italiano"
+        ),
+        FineWebQualityFilter(
+            exclusion_writer=JsonlWriter(
+                output_folder=os.path.join(REJECTED_DIR, "2_fineweb"),    # In questo modo creo una cartella per visualizzare tutti i documents rifiutati durante lo step relativo al filtro FineWebQualityFilter
+                # output_folder=REJECTED_DIR,
+                output_filename="fineweb_rejected_${rank}.jsonl"
+                ) if os.path.exists(REJECTED_DIR) else None
+        ),
 
         # Invece del blocco fornito da Datatrove posso usare il mio estrattore
         # DocStats(
         #     output_folder= os.path.join(OUTPUT_DIR, "feature"),
         #     groups_to_compute=["summary"]
         #     ),
-        ItalianFeatureExtractor(),
-        JsonlWriter(
-            output_folder = OUTPUT_DIR,
-            output_filename = "risultati_${rank}.jsonl", 
-        )
+
+        #Stats modificate per avere le statistiche di ogni singolo file
+        DocStatsCsv(
+            output_folder=os.path.join(OUTPUT_DIR, "feature"),
+            csv_filename="doc_stats_per_file.csv",
+            groups_to_compute=["summary"]
+        ),
+        # ItalianFeatureExtractor(),
+        # JsonlWriter(
+        #     output_folder = OUTPUT_DIR,
+        #     output_filename = "risultati_${rank}.jsonl", 
+        # )
     ]
 
     #Eseguo la pipeline sopra definita
