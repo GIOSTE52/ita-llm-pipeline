@@ -38,60 +38,14 @@ logger = logging.getLogger(__name__)
 # Feature che il classificatore si aspetta di trovare in doc.metadata
 # (devono coincidere con quelle prodotte da ItalianFeatureExtractor)
 DEFAULT_FEATURE_NAMES: List[str] = [
-"length",
-"white_space_ratio",
-"non_alpha_digit_ratio",
-"digit_ratio",
-"uppercase_ratio",
-"elipsis_ratio",
-"punctuation_ratio",
-"word_count",
-"sentence_count",
-"vocabulary_size",
-"lowercase_ratio",
-"vowel_ratio",
-"consonant_ratio",
-"avg_word_length",
-"avg_sentence_length",
-"quote_ratio",
-"parenthesis_ratio",
-"comma_ratio",
-"period_ratio",
-"question_mark_ratio",
-"exclamation_ratio",
-"colon_ratio",
-"semicolon_ratio",
-"stopword_ratio",
-"line_count",
-"paragraph_count",
-"avg_line_length",
-"avg_paragraph_length",
-"empty_line_ratio",
-"bullet_point_count",
-"bullet_point_ratio",
-"url_count",
-"url_density",
-"email_count",
-"email_density",
-"html_tag_count",
-"html_tag_ratio",
-"special_char_ratio",
-"most_common_word_freq",
-"repeated_word_count",
-"repeated_word_ratio",
-"repeated_char_count",
-"repeated_char_ratio",
-"repeated_sequence_count",
-"text_entropy",
-"unique_word_count",
-"unique_word_ratio",
-"all_caps_word_ratio",
-"all_lowercase_word_ratio",
-"mixed_case_word_ratio",
-"consecutive_spaces_count",
-"consecutive_punctuation_count"
+    "length",
+    "n_words",
+    "digit_ratio",
+    "uppercase_ratio",
+    "punctuation_ratio",
+    "whitespace_ratio",
+    "type_token_ratio",
 ]
-# length,white_space_ratio,non_alpha_digit_ratio,digit_ratio,uppercase_ratio,elipsis_ratio,punctuation_ratio,word_count,sentence_count,vocabulary_size,lowercase_ratio,vowel_ratio,consonant_ratio,avg_word_length,avg_sentence_length,quote_ratio,parenthesis_ratio,comma_ratio,period_ratio,question_mark_ratio,exclamation_ratio,colon_ratio,semicolon_ratio,stopword_ratio,line_count,paragraph_count,avg_line_length,avg_paragraph_length,empty_line_ratio,bullet_point_count,bullet_point_ratio,url_count,url_density,email_count,email_density,html_tag_count,html_tag_ratio,special_char_ratio,most_common_word_freq,repeated_word_count,repeated_word_ratio,repeated_char_count,repeated_char_ratio,repeated_sequence_count,text_entropy,unique_word_count,unique_word_ratio,all_caps_word_ratio,all_lowercase_word_ratio,mixed_case_word_ratio,consecutive_spaces_count,consecutive_punctuation_count
 
 LABEL_MAP = {"bad": 0, "good": 1}
 
@@ -230,41 +184,6 @@ class QualityClassifier(PipelineStep):
                 f"Valori label non validi: {invalid}. Ammessi: 'good', 'bad'."
             )
 
-        # ------- 1b. Correlation Matrix -------
-        # Calcola la matrice di correlazione tra tutte le feature + label
-        corr_df = X.copy()
-        corr_df["label"] = y
-        correlation_matrix = corr_df.corr()
-
-        print("=" * 60)
-        print("CORRELATION MATRIX")
-        print("=" * 60)
-        # Mostra le correlazioni di ogni feature con la label, ordinate per valore assoluto
-        label_corr = correlation_matrix["label"].drop("label").sort_values(
-            key=abs, ascending=False
-        )
-        print("\nCorrelazione con la label (ordinate per |valore|):")
-        print(label_corr.to_string())
-
-        # Identifica coppie di feature altamente correlate tra loro (|r| > 0.9)
-        high_corr_threshold = 0.9
-        feature_corr = correlation_matrix.drop(columns=["label"], index=["label"])
-        high_corr_pairs = []
-        for i in range(len(feature_corr.columns)):
-            for j in range(i + 1, len(feature_corr.columns)):
-                r = feature_corr.iloc[i, j]
-                if abs(r) > high_corr_threshold:
-                    high_corr_pairs.append(
-                        (feature_corr.columns[i], feature_corr.columns[j], round(r, 4))
-                    )
-
-        if high_corr_pairs:
-            print(f"\nCoppie di feature con |correlazione| > {high_corr_threshold}:")
-            for f1, f2, r in high_corr_pairs:
-                print(f"  {f1}  ↔  {f2}  :  {r}")
-        else:
-            print(f"\nNessuna coppia di feature con |correlazione| > {high_corr_threshold}")
-
         # ------- 2. Scaling -------
         # Normalizzazione delle features
         scaler = StandardScaler()
@@ -342,7 +261,6 @@ class QualityClassifier(PipelineStep):
             "feature_names": feat_names,
             "classification_report": report,
             "confusion_matrix": cm,
-            "correlation_matrix":correlation_matrix,
             "feature_importance": importance_df,
         }
 
