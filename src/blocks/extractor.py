@@ -1,6 +1,5 @@
 from datatrove.pipeline.base import PipelineStep
 from datatrove.data import DocumentsPipeline
-import re
 
 class ItalianFeatureExtractor(PipelineStep):
     def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
