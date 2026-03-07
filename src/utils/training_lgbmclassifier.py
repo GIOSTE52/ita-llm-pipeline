@@ -1,0 +1,6 @@
+from ..blocks.classifiers import QualityClassifier
+import os
+
+csv_path = os.path.join(os.path.dirname(__file__), "..", "..", "output", "feature", "doc_stats_per_file.csv")
+
+result = QualityClassifier.train_from_csv(csv_path)
