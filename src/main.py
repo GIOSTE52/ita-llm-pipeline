@@ -109,7 +109,8 @@ def pipeline_design() -> None:
         # oppure direttamente il nome dei file da far leggere al JsonlReader
         JsonlReader(
             data_folder = DATA_DIR,
-            glob_pattern="input.jsonl"
+            # glob_pattern="input.jsonl"
+            glob_pattern=os.path.join("train", "*.jsonl")
         ),
         # Scrivo un esempio di esecuzione con il SampleFilter(randomly keep 'rate'*100 percent of sample)
         # SamplerFilter(rate=0.8), 
