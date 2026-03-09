@@ -4,13 +4,49 @@ from tqdm import tqdm
 import time
 
 def get_label(text):
+    """
+    Criteri più realistici per buona/cattiva qualità.
+    Mescola più fattori per evitare separabilità perfetta.
+    """
     text_len = len(text)
-    punctuation_chars = ".,!?;:-()\""
-    punctuation_density = sum(1 for c in text if c in punctuation_chars) / (text_len + 1)
     
-    if text_len >= 800 and punctuation_density < 0.20:
-        return "good"
-    return "bad"
+    # Se troppo corto → bad
+    if text_len < 200:
+        return "bad"
+    
+    # Se troppo lungo e ripetitivo → bad
+    if text_len > 5000:
+        # Controlla ripetizioni
+        words = text.split()
+        if len(words) > 0:
+            unique_ratio = len(set(words)) / len(words)
+            if unique_ratio < 0.5:  # Troppa ripetizione
+                return "bad"
+    
+    # Controlla caratteri strani/corrotti
+    special_ratio = sum(1 for c in text if ord(c) > 127 and c not in 'àèéìòùÀÈÉÌÒÙ') / (text_len + 1)
+    if special_ratio > 0.1:
+        return "bad"
+    
+    # Controlla se sembra spam (molte maiuscole consecutive)
+    consecutive_caps = sum(1 for i in range(len(text)-1) if text[i].isupper() and text[i+1].isupper())
+    caps_ratio = consecutive_caps / (text_len + 1)
+    if caps_ratio > 0.15:
+        return "bad"
+    
+    # Controlla whitespace sporco
+    whitespace_ratio = sum(1 for c in text if c.isspace()) / (text_len + 1)
+    if whitespace_ratio > 0.4:
+        return "bad"
+    
+    # Controlla URL/email eccessive
+    url_count = text.count("http") + text.count("www")
+    email_count = text.count("@")
+    if url_count + email_count > 5:
+        return "bad"
+    
+    # Se passa tutti i controlli
+    return "good"
 
 def collect_dataset(output_file, total_target=1000):
     # Aumenta il timeout e imposta retry
