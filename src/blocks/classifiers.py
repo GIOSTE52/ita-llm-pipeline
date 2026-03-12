@@ -229,6 +229,41 @@ class QualityClassifier(PipelineStep):
             raise ValueError(
                 f"Valori label non validi: {invalid}. Ammessi: 'good', 'bad'."
             )
+        
+        # ------- 1b. Correlation Matrix -------
+        # Calcola la matrice di correlazione tra tutte le feature + label
+        corr_df = X.copy()
+        corr_df["label"] = y
+        correlation_matrix = corr_df.corr()
+
+        print("=" * 60)
+        print("CORRELATION MATRIX")
+        print("=" * 60)
+        # Mostra le correlazioni di ogni feature con la label, ordinate per valore assoluto
+        label_corr = correlation_matrix["label"].drop("label").sort_values(
+            key=abs, ascending=False
+        )
+        print("\nCorrelazione con la label (ordinate per |valore|):")
+        print(label_corr.to_string())
+
+        # Identifica coppie di feature altamente correlate tra loro (|r| > 0.9)
+        high_corr_threshold = 0.9
+        feature_corr = correlation_matrix.drop(columns=["label"], index=["label"])
+        high_corr_pairs = []
+        for i in range(len(feature_corr.columns)):
+            for j in range(i + 1, len(feature_corr.columns)):
+                r = feature_corr.iloc[i, j]
+                if abs(r) > high_corr_threshold:
+                    high_corr_pairs.append(
+                        (feature_corr.columns[i], feature_corr.columns[j], round(r, 4))
+                    )
+
+        if high_corr_pairs:
+            print(f"\nCoppie di feature con |correlazione| > {high_corr_threshold}:")
+            for f1, f2, r in high_corr_pairs:
+                print(f"  {f1}  ↔  {f2}  :  {r}")
+        else:
+            print(f"\nNessuna coppia di feature con |correlazione| > {high_corr_threshold}")
 
         # ------- 2. Scaling -------
         # Normalizzazione delle features
@@ -307,6 +342,7 @@ class QualityClassifier(PipelineStep):
             "feature_names": feat_names,
             "classification_report": report,
             "confusion_matrix": cm,
+            "correlation_matrix": correlation_matrix,
             "feature_importance": importance_df,
         }
 
