@@ -14,7 +14,7 @@ from datatrove.pipeline.filters import (
 from datatrove.pipeline.stats import DocStats, WordStats
 
 #per le stats di ogni file
-from blocks.my_doc_stats import DocStatsCsv  
+from blocks.stats import DocStatsCsv  
 
 from datatrove.pipeline.writers import JsonlWriter
 from datatrove.executor import LocalPipelineExecutor
