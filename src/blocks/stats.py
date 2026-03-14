@@ -389,6 +389,8 @@ class DocStatsCsv(DocStats):
             "text_entropy": 0, "unique_word_count": 0, "unique_word_ratio": 0,
             "all_caps_word_ratio": 0, "all_lowercase_word_ratio": 0, "mixed_case_word_ratio": 0,
             "consecutive_spaces_count": 0, "consecutive_punctuation_count": 0,
+            # Metadata da filtri
+            "language_score": 0.0,
             # Label
             "label": "bad",
         }
@@ -404,9 +406,13 @@ class DocStatsCsv(DocStats):
                 except Exception as e:
                     logger.error(f"Error extracting stats from {doc.id}", exc_info=e)
                     raise e
+
+                # Punteggio lingua calcolato da LanguageFilter (se presente in metadata)
+                language_score = doc.metadata.get("language_score", 0.0)
                 
                 row = {
                     "doc_id": doc.id,
+                    "language_score": language_score,
                     **doc_stats
                 }
                 self.all_docs_stats.append(row)

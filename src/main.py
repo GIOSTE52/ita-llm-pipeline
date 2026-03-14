@@ -125,13 +125,13 @@ def pipeline_design() -> None:
         #     favour_precision=True,
         # ),
 
-        # Commento questi due filtri perchè dobbiamo testare il solo blocco Stats con il classificatore
         LanguageFilter(
             exclusion_writer=JsonlWriter(
                 output_folder=os.path.join(REJECTED_DIR, "1_language"),
                 output_filename="non_italian_${rank}.jsonl",
                 ) if os.path.exists(REJECTED_DIR) else None, # type: ignore
-            # languages="italiano"
+            languages="it",
+            language_threshold=0.8 # DA PROVARE SE FILTRA TROPPO O TROPPO POCO
         ),
         FineWebQualityFilter(
             exclusion_writer=JsonlWriter(
