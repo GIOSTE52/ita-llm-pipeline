@@ -18,7 +18,6 @@ from blocks.stats import DocStatsCsv
 
 from datatrove.pipeline.writers import JsonlWriter
 from datatrove.executor import LocalPipelineExecutor
-# from blocks.my_doc_stats import ItalianFeatureExtractor
 from utils import output_organizer
 
 #Come alternativa è possibile usare load_dotenv
@@ -110,7 +109,7 @@ def pipeline_design() -> None:
         JsonlReader(
             data_folder = DATA_DIR,
             # glob_pattern="input.jsonl"
-            glob_pattern=os.path.join("train", "*.jsonl")
+            glob_pattern=os.path.join("train", "hand_label.jsonl")
         ),
         # Scrivo un esempio di esecuzione con il SampleFilter(randomly keep 'rate'*100 percent of sample)
         # SamplerFilter(rate=0.8), 

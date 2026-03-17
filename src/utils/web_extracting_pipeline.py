@@ -55,12 +55,13 @@ if __name__ == "__main__":
             languages=["it"],
             language_threshold=0.8,
         ),
-        GopherRepetitionFilter(exclusion_writer=JsonlWriter(f"{OUT_BASE}/removed/gopher_rep")),
-        GopherQualityFilter(exclusion_writer=JsonlWriter(f"{OUT_BASE}/removed/gopher_qual")),
-        C4QualityFilter(
-            filter_no_terminal_punct=False,
-            exclusion_writer=JsonlWriter(f"{OUT_BASE}/removed/c4")
-        ),
+        # Per ora commento questi filtri per constatare se sono necessari
+        # GopherRepetitionFilter(exclusion_writer=JsonlWriter(f"{OUT_BASE}/removed/gopher_rep")),
+        # GopherQualityFilter(exclusion_writer=JsonlWriter(f"{OUT_BASE}/removed/gopher_qual")),
+        # C4QualityFilter(
+        #     filter_no_terminal_punct=False,
+        #     exclusion_writer=JsonlWriter(f"{OUT_BASE}/removed/c4")
+        # ),
         FineWebQualityFilter(exclusion_writer=JsonlWriter(f"{OUT_BASE}/removed/fineweb_qual")),
 
         # datatrove permette di collegarla agli altri step della pipeline in modo automatico inserendone in input l'iteratore del blocco precedente
