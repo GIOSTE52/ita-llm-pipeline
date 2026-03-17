@@ -1,7 +1,3 @@
-import gzip
-import random
-import urllib.request
-
 from datatrove.executor.local import LocalPipelineExecutor
 from datatrove.pipeline.readers import WarcReader
 from datatrove.pipeline.extractors import Trafilatura
@@ -43,7 +39,7 @@ if __name__ == "__main__":
         WarcReader(
             data_folder="https://data.commoncrawl.org",
             paths_file=WARC_PATHS_FILE,
-            limit=10000,
+            limit=-1,
             shuffle_files=True,
         ),
 
