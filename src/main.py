@@ -109,7 +109,7 @@ def pipeline_design() -> None:
         JsonlReader(
             data_folder = DATA_DIR,
             # glob_pattern="input.jsonl"
-            glob_pattern=os.path.join("train", "hand_label.jsonl")
+            glob_pattern=os.path.join("train", "*.jsonl")
         ),
         # Scrivo un esempio di esecuzione con il SampleFilter(randomly keep 'rate'*100 percent of sample)
         # SamplerFilter(rate=0.8), 
@@ -123,7 +123,6 @@ def pipeline_design() -> None:
         # Trafilatura(
         #     favour_precision=True,
         # ),
-
         LanguageFilter(
             exclusion_writer=JsonlWriter(
                 output_folder=os.path.join(REJECTED_DIR, "1_language"),
@@ -139,24 +138,16 @@ def pipeline_design() -> None:
                 output_filename="fineweb_rejected_${rank}.jsonl"
                 ) if os.path.exists(REJECTED_DIR) else None
         ),
-
-        # Invece del blocco fornito da Datatrove posso usare il mio estrattore
-        # DocStats(
-        #     output_folder= os.path.join(OUTPUT_DIR, "feature"),
-        #     groups_to_compute=["summary"]
-        #     ),
-
         #Stats modificate per avere le statistiche di ogni singolo file
         DocStatsCsv(
             output_folder=os.path.join(OUTPUT_DIR, "feature"),
             csv_filename="doc_stats_per_file.csv",
             groups_to_compute=["summary"]
         ),
-        # ItalianFeatureExtractor(),
-        # JsonlWriter(
-        #     output_folder = OUTPUT_DIR,
-        #     output_filename = "risultati_${rank}.jsonl", 
-        # )
+        JsonlWriter(
+            output_folder = OUTPUT_DIR,
+            output_filename = "risultati_${rank}.jsonl", 
+        )
     ]
 
     #Eseguo la pipeline sopra definita
