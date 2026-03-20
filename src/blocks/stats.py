@@ -77,7 +77,7 @@ class DocStatsCsv(DocStats):
             
             # === LABEL (good/bad) basato su euristiche ===
             label = self._assign_label(
-                text, base_stats, linguistic_stats, structural_stats, anomaly_stats
+                doc, text, base_stats, linguistic_stats, structural_stats, anomaly_stats
             )
             
             # Combina tutte le features
@@ -262,12 +262,15 @@ class DocStatsCsv(DocStats):
             "consecutive_punctuation_count": consecutive_punctuation,
         }
 
-    def _assign_label(self, text: str, base_stats: dict, linguistic_stats: dict, 
+    def _assign_label(self,doc: Document, text: str, base_stats: dict, linguistic_stats: dict, 
                       structural_stats: dict, anomaly_stats: dict) -> str:
         """
         Assegna un label 'good' o 'bad' basato su euristiche.
         Questa è una baseline - potete personalizzarla per ogni persona!
         """
+        # Se il documento ha già una label nei metadata, usiamo quella!
+        if "label" in doc.metadata:
+            return doc.metadata["label"]
         score = 0  # Score da 0 a 100, >50 = good
         
         # === PENALITÀ (bad indicators) ===
@@ -311,8 +314,8 @@ class DocStatsCsv(DocStats):
         # === BONUS (good indicators) ===
         
         # Documento di buona lunghezza
-        if 500 < base_stats["length"] < 10000:
-            score += 15
+        if 500 < base_stats["length"] < 15000:
+            score += 20
         
         # Numero di frasi ragionevole
         if 3 < linguistic_stats["sentence_count"] < 100:
@@ -323,20 +326,21 @@ class DocStatsCsv(DocStats):
             score += 10
         
         # Buon rapporto di stopwords (italiano naturale)
-        if 0.3 < linguistic_stats["stopword_ratio"] < 0.6:
-            score += 10
+        if 0.15 < linguistic_stats["stopword_ratio"] < 0.5:
+            score += 15
         
         # Paragrafazione presente
         if structural_stats["paragraph_count"] > 1:
             score += 10
         
         # Uso di punteggiatura varia (non monotono)
-        punc_variety = (
-            linguistic_stats["period_ratio"] > 0 +
-            linguistic_stats["comma_ratio"] > 0 +
-            linguistic_stats["question_mark_ratio"] > 0 +
+        punc_list = [
+            linguistic_stats["period_ratio"] > 0,
+            linguistic_stats["comma_ratio"] > 0,
+            linguistic_stats["question_mark_ratio"] > 0,
             linguistic_stats["exclamation_ratio"] > 0
-        )
+        ]
+        punc_variety = sum(punc_list)
         if punc_variety >= 2:
             score += 10
         
