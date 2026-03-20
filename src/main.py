@@ -128,15 +128,17 @@ def pipeline_design() -> None:
             exclusion_writer=JsonlWriter(
                 output_folder=os.path.join(REJECTED_DIR, "1_language"),
                 output_filename="non_italian_${rank}.jsonl",
+                compression=None
                 ) if os.path.exists(REJECTED_DIR) else None, # type: ignore
             languages="it",
-            language_threshold=0.8 # DA PROVARE SE FILTRA TROPPO O TROPPO POCO
+            language_threshold=0.7# DA PROVARE SE FILTRA TROPPO O TROPPO POCO (ho abbassato perche scarta dati tecnici ~silvio)
         ),
         FineWebQualityFilter(
             exclusion_writer=JsonlWriter(
                 output_folder=os.path.join(REJECTED_DIR, "2_fineweb"),    # In questo modo creo una cartella per visualizzare tutti i documents rifiutati durante lo step relativo al filtro FineWebQualityFilter
                 # output_folder=REJECTED_DIR,
-                output_filename="fineweb_rejected_${rank}.jsonl"
+                output_filename="fineweb_rejected_${rank}.jsonl",
+                compression=None
                 ) if os.path.exists(REJECTED_DIR) else None
         ),
 
@@ -153,10 +155,11 @@ def pipeline_design() -> None:
             groups_to_compute=["summary"]
         ),
         # ItalianFeatureExtractor(),
-        # JsonlWriter(
-        #     output_folder = OUTPUT_DIR,
-        #     output_filename = "risultati_${rank}.jsonl", 
-        # )
+        JsonlWriter(
+            output_folder = OUTPUT_DIR,
+            output_filename = "italiano_pulito_${rank}.jsonl", 
+            compression = None #per lavorare levo un attimo la compressione cosi sono piu veloce ~silvio
+        )
     ]
 
     #Eseguo la pipeline sopra definita
