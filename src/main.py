@@ -1,6 +1,7 @@
 from datatrove.executor import LocalPipelineExecutor
 from config_loader import get_config
 from pipeline_factory import build_italian_cleaning_pipeline
+from utils.output_organizer import output_classification
 
 def main():
     """
@@ -23,6 +24,13 @@ def main():
         workers=1
     )
     executor.run()
+
+    # 4. Lo script "usa e getta" per il debug
+    print("\n--- 🔍 Analisi Etichette (Scarti) ---")
+    output_classification(cfg["REJECTED_DIR"], cfg["OUTPUT_DIR"])
+
+    print("\n--- 🔍 Analisi Accuratezza Filtri ---")
+    output_classification(cfg["REJECTED_DIR"], cfg["OUTPUT_DIR"])
 
 if __name__ == "__main__":
     main()

@@ -17,7 +17,7 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir):
 
         # 3. Filtro Custom per Rumore Web
         CustomItalianFilter(
-            output_folder=os.path.join(rejected_dir, "3_custom_filter"),
+            output_folder=os.path.join(rejected_dir, "2_custom_filter"),
             filename="custom_rejected_${rank}.jsonl"
         ),
 

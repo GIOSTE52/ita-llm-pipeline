@@ -32,6 +32,7 @@ class CustomItalianFilter(BaseFilter):
     """
     def __init__(self, output_folder: str, filename: str):
         super().__init__()
+        self.name = "🇮🇹 Custom Italian Filter"
         self.exclusion_writer = JsonlWriter(
             output_folder=output_folder,
             output_filename=filename,
@@ -42,6 +43,6 @@ class CustomItalianFilter(BaseFilter):
     def filter(self, doc) -> bool:
         text_lower = doc.text.lower()
         if len(text_lower) < 120: return False
-        if text_lower.count("|") > 3: return False
+        if text_lower.count("|") > 6: return False
         bad_count = sum(1 for word in self.bad_keywords if word in text_lower)
         return bad_count < 3

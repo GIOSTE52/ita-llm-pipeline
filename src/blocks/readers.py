@@ -1,7 +1,7 @@
 import os
 from datatrove.pipeline.readers import JsonlReader
 
-def get_jsonl_reader(data_dir: str, pattern: str = "train/rp_normalized.jsonl"):
+def get_jsonl_reader(data_dir: str, pattern: str = "train/hand_label.jsonl"):
     """
     Inizializza il lettore per file JSONL.
     

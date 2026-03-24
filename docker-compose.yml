@@ -11,6 +11,8 @@ services:
       # Output e logs (read-write)
       - ./output:/app/output
       - ./logs:/app/logs
+      # Mappa la cache di HuggingFace/Datatrove sul volume persistente
+      - hf_cache:/root/.cache/huggingface
     environment:
       - DATATROVE_COLORIZE_LOGS=1
       - DATATROVE_COLORIZE_LOG_FILES=1
@@ -29,6 +31,10 @@ services:
       - ./logs:/app/logs
       - ./requirements-dev.txt:/app/requirements-dev.txt:ro
       - ./pytest.ini:/app/pytest.ini:ro
+      - hf_cache:/root/.cache/huggingface
     command: ["sh", "-c", "pip install --no-cache-dir -r requirements-dev.txt && pytest tests/ -v"]
     profiles:
       - test
+
+volumes:
+  hf_cache:
