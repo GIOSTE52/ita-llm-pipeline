@@ -2,7 +2,7 @@ import os
 import argparse
 # from datatrove.data import Document
 from datatrove.pipeline.readers import JsonlReader
-from datatrove.pipeline.extractors import Trafilatura
+# from datatrove.pipeline.extractors import Trafilatura
 from datatrove.pipeline.filters import (
     C4QualityFilter,
     FineWebQualityFilter,

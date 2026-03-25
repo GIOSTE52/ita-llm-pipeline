@@ -18,7 +18,7 @@ tokenizers==0.22.2
 
 lightgbm    # for machine learning models in classifiers
 
-trafilatura  # for web crawling and content extraction
+# trafilatura  # for web crawling and content extraction
 
 # pytest==9.0.2
 # pytest-rerunfailures==16.1
