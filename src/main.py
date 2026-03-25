@@ -2,7 +2,7 @@ import os
 import argparse
 # from datatrove.data import Document
 from datatrove.pipeline.readers import JsonlReader
-# from datatrove.pipeline.extractors import Trafilatura
+from datatrove.pipeline.extractors import Trafilatura
 from datatrove.pipeline.filters import (
     C4QualityFilter,
     FineWebQualityFilter,
@@ -120,9 +120,9 @@ def pipeline_design() -> None:
         #         output_folder=os.path.join(REJECTED_DIR, "1_urls"),
         #     )
         # ),
-        # Trafilatura(
-        #     favour_precision=True,
-        # ),
+        Trafilatura(
+            favour_precision=True,
+        ),
         LanguageFilter(
             exclusion_writer=JsonlWriter(
                 output_folder=os.path.join(REJECTED_DIR, "1_language"),
