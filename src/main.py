@@ -33,4 +33,4 @@ def main():
     output_classification(cfg["REJECTED_DIR"], cfg["OUTPUT_DIR"])
 
 if __name__ == "__main__":
-    main()
+    main() 
