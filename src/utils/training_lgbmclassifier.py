@@ -9,3 +9,6 @@ csv_path = os.path.join(os.path.dirname(__file__), "..", "..", "output", "featur
 
 
 result = QualityClassifier.train_from_csv(csv_path)
+
+# Salvo il modello
+# QualityClassifier.save_model(result, "models/lgbm_quality_model.joblib")

@@ -11,6 +11,9 @@ def extract_args():
     parser.add_argument("--config", type=str, default=None, help="Path al file .conf")
     parser.add_argument("--root-dir", type=str, default=default_root)
     parser.add_argument("--output-dir", type=str, default=default_output)
+    parser.add_argument("--rejected-dir", type=str, default=None, help="Path to rejected files")
+    parser.add_argument("--csv-dir", type=str, default=None, help="Path to csv directory")
+    parser.add_argument("--feature-dir", type=str, default=None, help="Path to feature stats")
     return parser.parse_args()
 
 def get_config():
@@ -25,11 +28,13 @@ def get_config():
     OUTPUT_DIR = os.environ.get("OUTPUT_DIR", args.output_dir)
     
     # 2. Sottocartelle (Default calcolati)
+# 2. Sottocartelle (Logica: Ambiente > Argomento > Default)
     config = {
         "DATA_DIR": os.environ.get("DATA_DIR", os.path.join(ROOT_DIR, "data")),
         "OUTPUT_DIR": OUTPUT_DIR,
-        "REJECTED_DIR": os.environ.get("REJECTED_DIR", os.path.join(OUTPUT_DIR, "rejected")),
-        "FEATURE_DIR": os.environ.get("FEATURE_DIR", os.path.join(OUTPUT_DIR, "feature")),
+        "REJECTED_DIR": os.environ.get("REJECTED_DIR", args.rejected_dir or os.path.join(OUTPUT_DIR, "rejected")),
+        "FEATURE_DIR": os.environ.get("FEATURE_DIR", args.feature_dir or os.path.join(OUTPUT_DIR, "feature")),
+        "CSV_DIR": os.environ.get("CSV_DIR", args.csv_dir or os.path.join(OUTPUT_DIR, "csv")),
     }
 
     # 3. Creazione automatica cartelle

@@ -76,9 +76,7 @@ class DocStatsCsv(DocStats):
             anomaly_stats = self._extract_anomaly_stats(text)
             
             # === LABEL (good/bad) basato su euristiche ===
-            label = self._assign_label(
-                doc, text, base_stats, linguistic_stats, structural_stats, anomaly_stats
-            )
+            label = doc.metadata["label"]
             
             # Combina tutte le features
             all_stats = {
@@ -262,98 +260,98 @@ class DocStatsCsv(DocStats):
             "consecutive_punctuation_count": consecutive_punctuation,
         }
 
-    def _assign_label(self,doc: Document, text: str, base_stats: dict, linguistic_stats: dict, 
-                      structural_stats: dict, anomaly_stats: dict) -> str:
-        """
-        Assegna un label 'good' o 'bad' basato su euristiche.
-        Questa è una baseline - potete personalizzarla per ogni persona!
-        """
-        # Se il documento ha già una label nei metadata, usiamo quella!
-        if "label" in doc.metadata:
-            return doc.metadata["label"]
-        score = 0  # Score da 0 a 100, >50 = good
+    # def _assign_label(self,doc: Document, text: str, base_stats: dict, linguistic_stats: dict, 
+    #                   structural_stats: dict, anomaly_stats: dict) -> str:
+    #     """
+    #     Assegna un label 'good' o 'bad' basato su euristiche.
+    #     Questa è una baseline - potete personalizzarla per ogni persona!
+    #     """
+    #     # Se il documento ha già una label nei metadata, usiamo quella!
+    #     if "label" in doc.metadata:
+    #         return doc.metadata["label"]
+    #     score = 0  # Score da 0 a 100, >50 = good
         
-        # === PENALITÀ (bad indicators) ===
+    #     # === PENALITÀ (bad indicators) ===
         
-        # Documento troppo corto
-        if base_stats["length"] < 100:
-            score -= 20
+    #     # Documento troppo corto
+    #     if base_stats["length"] < 100:
+    #         score -= 20
         
-        # Documento molto corto
-        if base_stats["length"] < 50:
-            score -= 30
+    #     # Documento molto corto
+    #     if base_stats["length"] < 50:
+    #         score -= 30
         
-        # Alto rapporto di caratteri speciali/non-alfanumerici
-        if base_stats["non_alpha_digit_ratio"] > 0.4:
-            score -= 15
+    #     # Alto rapporto di caratteri speciali/non-alfanumerici
+    #     if base_stats["non_alpha_digit_ratio"] > 0.4:
+    #         score -= 15
         
-        # Entropya molto alta (testo disordinato/rumore)
-        if anomaly_stats["text_entropy"] > 5.5:
-            score -= 20
+    #     # Entropya molto alta (testo disordinato/rumore)
+    #     if anomaly_stats["text_entropy"] > 5.5:
+    #         score -= 20
         
-        # Troppe sequenze ripetute (spam indicator)
-        if anomaly_stats["repeated_sequence_count"] > 3:
-            score -= 25
+    #     # Troppe sequenze ripetute (spam indicator)
+    #     if anomaly_stats["repeated_sequence_count"] > 3:
+    #         score -= 25
         
-        # Troppi spazi bianchi consecutivi
-        if anomaly_stats["consecutive_spaces_count"] > 5:
-            score -= 15
+    #     # Troppi spazi bianchi consecutivi
+    #     if anomaly_stats["consecutive_spaces_count"] > 5:
+    #         score -= 15
         
-        # Punteggiatura eccessiva consecutiva
-        if anomaly_stats["consecutive_punctuation_count"] > 10:
-            score -= 15
+    #     # Punteggiatura eccessiva consecutiva
+    #     if anomaly_stats["consecutive_punctuation_count"] > 10:
+    #         score -= 15
         
-        # Troppi caratteri ripetuti (spam)
-        if anomaly_stats["repeated_char_ratio"] > 0.05:
-            score -= 20
+    #     # Troppi caratteri ripetuti (spam)
+    #     if anomaly_stats["repeated_char_ratio"] > 0.05:
+    #         score -= 20
         
-        # Testo tutto maiuscolo
-        if base_stats["uppercase_ratio"] > 0.7:
-            score -= 20
+    #     # Testo tutto maiuscolo
+    #     if base_stats["uppercase_ratio"] > 0.7:
+    #         score -= 20
         
-        # === BONUS (good indicators) ===
+    #     # === BONUS (good indicators) ===
         
-        # Documento di buona lunghezza
-        if 500 < base_stats["length"] < 15000:
-            score += 20
+    #     # Documento di buona lunghezza
+    #     if 500 < base_stats["length"] < 15000:
+    #         score += 20
         
-        # Numero di frasi ragionevole
-        if 3 < linguistic_stats["sentence_count"] < 100:
-            score += 10
+    #     # Numero di frasi ragionevole
+    #     if 3 < linguistic_stats["sentence_count"] < 100:
+    #         score += 10
         
-        # Buona lunghezza media delle parole (segno di qualità)
-        if 4 < linguistic_stats["avg_word_length"] < 8:
-            score += 10
+    #     # Buona lunghezza media delle parole (segno di qualità)
+    #     if 4 < linguistic_stats["avg_word_length"] < 8:
+    #         score += 10
         
-        # Buon rapporto di stopwords (italiano naturale)
-        if 0.15 < linguistic_stats["stopword_ratio"] < 0.5:
-            score += 15
+    #     # Buon rapporto di stopwords (italiano naturale)
+    #     if 0.15 < linguistic_stats["stopword_ratio"] < 0.5:
+    #         score += 15
         
-        # Paragrafazione presente
-        if structural_stats["paragraph_count"] > 1:
-            score += 10
+    #     # Paragrafazione presente
+    #     if structural_stats["paragraph_count"] > 1:
+    #         score += 10
         
-        # Uso di punteggiatura varia (non monotono)
-        punc_list = [
-            linguistic_stats["period_ratio"] > 0,
-            linguistic_stats["comma_ratio"] > 0,
-            linguistic_stats["question_mark_ratio"] > 0,
-            linguistic_stats["exclamation_ratio"] > 0
-        ]
-        punc_variety = sum(punc_list)
-        if punc_variety >= 2:
-            score += 10
+    #     # Uso di punteggiatura varia (non monotono)
+    #     punc_list = [
+    #         linguistic_stats["period_ratio"] > 0,
+    #         linguistic_stats["comma_ratio"] > 0,
+    #         linguistic_stats["question_mark_ratio"] > 0,
+    #         linguistic_stats["exclamation_ratio"] > 0
+    #     ]
+    #     punc_variety = sum(punc_list)
+    #     if punc_variety >= 2:
+    #         score += 10
         
-        # Buona diversità di vocabolario
-        if linguistic_stats["vocabulary_size"] > linguistic_stats["word_count"] * 0.6:
-            score += 10
+    #     # Buona diversità di vocabolario
+    #     if linguistic_stats["vocabulary_size"] > linguistic_stats["word_count"] * 0.6:
+    #         score += 10
         
-        # Entropia media (testo coerente)
-        if 4 < anomaly_stats["text_entropy"] <= 5.5:
-            score += 10
+    #     # Entropia media (testo coerente)
+    #     if 4 < anomaly_stats["text_entropy"] <= 5.5:
+    #         score += 10
         
-        # Assegna il label
-        return "good" if score > 50 else "bad"
+    #     # Assegna il label
+    #     return "good" if score > 50 else "bad"
 
     def _calculate_entropy(self, text: str) -> float:
         """Calcola l'entropia di Shannon del testo"""
