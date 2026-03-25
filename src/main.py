@@ -120,9 +120,9 @@ def pipeline_design() -> None:
         #         output_folder=os.path.join(REJECTED_DIR, "1_urls"),
         #     )
         # ),
-        Trafilatura(
-            favour_precision=True,
-        ),
+        # Trafilatura(
+        #     favour_precision=False,
+        # ),
         LanguageFilter(
             exclusion_writer=JsonlWriter(
                 output_folder=os.path.join(REJECTED_DIR, "1_language"),
