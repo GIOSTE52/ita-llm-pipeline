@@ -14,6 +14,7 @@ def extract_args():
     parser.add_argument("--rejected-dir", type=str, default=None, help="Path to rejected files")
     parser.add_argument("--csv-dir", type=str, default=None, help="Path to csv directory")
     parser.add_argument("--feature-dir", type=str, default=None, help="Path to feature stats")
+    parser.add_argument("--model-path", type=str, default=None)
     return parser.parse_args()
 
 def get_config():
@@ -35,10 +36,20 @@ def get_config():
         "REJECTED_DIR": os.environ.get("REJECTED_DIR", args.rejected_dir or os.path.join(OUTPUT_DIR, "rejected")),
         "FEATURE_DIR": os.environ.get("FEATURE_DIR", args.feature_dir or os.path.join(OUTPUT_DIR, "feature")),
         "CSV_DIR": os.environ.get("CSV_DIR", args.csv_dir or os.path.join(OUTPUT_DIR, "csv")),
+        "MODEL_PATH": os.environ.get("MODEL_PATH", os.path.join(ROOT_DIR, "models", "spam_lgbm.joblib")),
     }
 
-    # 3. Creazione automatica cartelle
-    for path in config.values():
-        os.makedirs(path, exist_ok=True)
+    # 3. Creazione automatica cartelle (gestendo il file del modello)
+    for key, path in config.items():
+        if key == "MODEL_PATH":
+            # Per il modello, creiamo la cartella che lo contiene (models/), non il file stesso
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+        else:
+            # Per le altre sono tutte directory, procediamo normalmente
+            os.makedirs(path, exist_ok=True)
+            
+    # Verifica di sicurezza: il modello esiste?
+    if not os.path.exists(config["MODEL_PATH"]):
+        print(f"⚠️ [WARNING] Modello non trovato in: {config['MODEL_PATH']}")
         
     return config

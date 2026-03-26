@@ -14,7 +14,8 @@ def main():
     pipeline_blocks = build_italian_cleaning_pipeline(
         data_dir=cfg["DATA_DIR"],
         output_dir=cfg["OUTPUT_DIR"],
-        rejected_dir=cfg["REJECTED_DIR"]
+        rejected_dir=cfg["REJECTED_DIR"],
+        model_path=cfg["MODEL_PATH"]
     )
     
     # 3. Esecuzione
@@ -23,14 +24,14 @@ def main():
         tasks=1,
         workers=1
     )
+    # 4. Avvio della pipeline
+    print(f"\n🚀 Pipeline avviata su: {cfg['DATA_DIR']}")
     executor.run()
 
-    # 4. Lo script "usa e getta" per il debug
-    print("\n--- 🔍 Analisi Etichette (Scarti) ---")
+    # 5. Analisi finale degli scarti (cartelle 1_..., 2_..., ecc.)
+    print("\n--- 🔍 Analisi Risultati ---")
     output_classification(cfg["REJECTED_DIR"], cfg["OUTPUT_DIR"])
-
-    print("\n--- 🔍 Analisi Accuratezza Filtri ---")
-    output_classification(cfg["REJECTED_DIR"], cfg["OUTPUT_DIR"])
+    print(f"\n✅ Operazione completata. Statistiche in: {cfg['FEATURE_DIR']}")
 
 if __name__ == "__main__":
     main() 
