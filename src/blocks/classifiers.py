@@ -1,16 +1,8 @@
 """
 Classificatore ML binario per la qualità dei documenti di testo.
 
-Prende in input un vettore di feature (estratte da ItalianFeatureExtractor)
+Prende in input un vettore di feature (estratte da DocStatsCsv)
 e classifica ogni documento come "good" oppure "bad".
-
-Utilizzo:
-    1) Training:
-        result = QualityClassifier.train_from_csv("quality_dataset.csv")
-        QualityClassifier.save_model(result, "models/quality_model.joblib")
-
-    2) Nella pipeline datatrove (inferenza):
-        QualityClassifier(model_path="models/quality_model.joblib")
 """
 
 from __future__ import annotations
@@ -52,7 +44,7 @@ DEFAULT_FEATURE_NAMES: List[str] = [
 "vowel_ratio",
 "consonant_ratio",
 "avg_word_length",
-"avg_sentence_length",
+"avg_sentence_length", # molto importante per capire la scorrevolezza di un testo
 "quote_ratio",
 "parenthesis_ratio",
 "comma_ratio",
@@ -61,7 +53,7 @@ DEFAULT_FEATURE_NAMES: List[str] = [
 "exclamation_ratio",
 "colon_ratio",
 "semicolon_ratio",
-"stopword_ratio",
+"stopword_ratio", # può aiutare ma può anche creare bias (importante per capire la scorrevolezza di un testo)
 "line_count",
 "paragraph_count",
 "avg_line_length",
@@ -76,15 +68,15 @@ DEFAULT_FEATURE_NAMES: List[str] = [
 "html_tag_count",
 "html_tag_ratio",
 "special_char_ratio",
-"most_common_word_freq",
+"most_common_word_freq",    # molto importante per capire la scorrevolezza di un testo
 "repeated_word_count",
-"repeated_word_ratio",
+"repeated_word_ratio",  # molto importante per capire la scorrevolezza di un testo
 "repeated_char_count",
 "repeated_char_ratio",
 "repeated_sequence_count",
-"text_entropy",
+"text_entropy", # molto importante per calcolare la qualità del testo
 "unique_word_count",
-"unique_word_ratio",
+"unique_word_ratio",    # molto importante per capire la scorrevolezza di un testo
 "all_caps_word_ratio",
 "all_lowercase_word_ratio",
 "mixed_case_word_ratio",
@@ -126,7 +118,6 @@ class QualityClassifier(PipelineStep):
     ):
         super().__init__()
         self.model_path = model_path
-        self.feature_names = feature_names or DEFAULT_FEATURE_NAMES
         self.threshold = threshold
 
         # Carica modello e scaler dal file .joblib
@@ -134,6 +125,7 @@ class QualityClassifier(PipelineStep):
         self.model: lgb.LGBMClassifier = artifact["model"]
         self.scaler: StandardScaler = artifact["scaler"]
         self._feature_names_train: List[str] = artifact["feature_names"]
+        self.feature_names = feature_names or self._feature_names_train or DEFAULT_FEATURE_NAMES
 
         logger.info("Modello caricato da %s", self.model_path)
 
@@ -154,8 +146,10 @@ class QualityClassifier(PipelineStep):
                 yield doc
                 continue
 
-            X = np.array(features).reshape(1, -1)
+            # X = np.array(features).reshape(1, -1)
+            X = pd.DataFrame([features], columns = self.feature_names) # riga da rimuovere se si vuole usare np.array
             X_scaled = self.scaler.transform(X)
+            X_scaled = pd.DataFrame(X_scaled, columns = self.feature_names) # riga d arimuovere se si vuole usare np.array
 
             proba = self.model.predict_proba(X_scaled)[0]  # [P(bad), P(good)]
             score_good = float(proba[1])

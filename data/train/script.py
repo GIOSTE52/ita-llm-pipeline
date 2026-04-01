@@ -1,6 +1,10 @@
 import json
 import os
 
+"""
+Questo script viene lanciato solo la prima volta che si vuole normalizzare 
+il dataset recuperato da RedPajama
+"""
 
 def fix_rp_dataset():
     input_file = "rpDataset.jsonl"

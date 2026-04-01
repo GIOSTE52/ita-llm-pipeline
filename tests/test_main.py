@@ -1,225 +1,199 @@
 """
-Test per le funzioni di main.py
+Test per configurazione ed entrypoint principale.
 """
 
 import os
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
-import pytest
+import config_loader
+import main
 
-# Aggiungi src al path per importare i moduli
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from main import load_config, extract_args
-
-
-# =============================================================================
-# Test load_config
-# =============================================================================
-
-class TestLoadConfig:
-    """Test per la funzione load_config."""
-
-    def test_load_valid_config(self, temp_config_file: Path, clean_env):
-        """Verifica il caricamento di un config valido."""
-        load_config(str(temp_config_file))
-        
-        assert os.environ.get("DATATROVE_COLORIZE_LOGS") == "0"
-
-    def test_config_not_found(self, capsys, clean_env):
-        """Verifica il comportamento con config non esistente."""
-        load_config("/path/to/nonexistent.conf")
-        
-        captured = capsys.readouterr()
-        assert "Config non trovato" in captured.out
-
-    def test_skip_comments(self, temp_dir: Path, clean_env):
-        """Verifica che i commenti vengano saltati."""
-        config_content = """# Questo è un commento
-# TEST_VAR=non_impostata
-REAL_VAR=valore"""
-        
-        config_path = temp_dir / "test.conf"
-        config_path.write_text(config_content)
-        
-        load_config(str(config_path))
-        
-        assert os.environ.get("TEST_VAR") is None
-        assert os.environ.get("REAL_VAR") == "valore"
-        
-        # Cleanup
-        del os.environ["REAL_VAR"]
-
-    def test_skip_empty_lines(self, temp_dir: Path, clean_env):
-        """Verifica che le righe vuote vengano saltate."""
-        config_content = """VAR1=primo
-
-VAR2=secondo"""
-        
-        config_path = temp_dir / "test.conf"
-        config_path.write_text(config_content)
-        
-        load_config(str(config_path))
-        
-        assert os.environ.get("VAR1") == "primo"
-        assert os.environ.get("VAR2") == "secondo"
-        
-        # Cleanup
-        del os.environ["VAR1"]
-        del os.environ["VAR2"]
-
-    def test_strip_export_keyword(self, temp_dir: Path, clean_env):
-        """Verifica che 'export' venga rimosso."""
-        config_content = """export MY_VAR=valore
-export ANOTHER_VAR=altro"""
-        
-        config_path = temp_dir / "test.conf"
-        config_path.write_text(config_content)
-        
-        load_config(str(config_path))
-        
-        assert os.environ.get("MY_VAR") == "valore"
-        assert os.environ.get("ANOTHER_VAR") == "altro"
-        
-        # Cleanup
-        del os.environ["MY_VAR"]
-        del os.environ["ANOTHER_VAR"]
-
-    def test_strip_quotes(self, temp_dir: Path, clean_env):
-        """Verifica che le virgolette vengano rimosse."""
-        config_content = """QUOTED_VAR="valore con spazi"
-SINGLE_QUOTED='altro valore'"""
-        
-        config_path = temp_dir / "test.conf"
-        config_path.write_text(config_content)
-        
-        load_config(str(config_path))
-        
-        assert os.environ.get("QUOTED_VAR") == "valore con spazi"
-        assert os.environ.get("SINGLE_QUOTED") == "altro valore"
-        
-        # Cleanup
-        del os.environ["QUOTED_VAR"]
-        del os.environ["SINGLE_QUOTED"]
-
-
-# =============================================================================
-# Test extract_args
-# =============================================================================
 
 class TestExtractArgs:
-    """Test per la funzione extract_args."""
-
-    def test_default_values(self, monkeypatch):
-        """Verifica i valori di default quando non in Docker."""
-        # Salva riferimento alla funzione originale prima del mock
+    def test_default_values_outside_docker(self, monkeypatch):
         original_exists = os.path.exists
-        # Simula di non essere in Docker
-        monkeypatch.setattr(os.path, "exists", lambda p: False if p == "/app/src" else original_exists(p))
-        
-        parser = extract_args()
-        args = parser.parse_args([])
-        
+
+        def fake_exists(path):
+            if path == "/app/src":
+                return False
+            return original_exists(path)
+
+        monkeypatch.setattr(config_loader.os.path, "exists", fake_exists)
+        monkeypatch.setattr(sys, "argv", ["prog"])
+
+        args = config_loader.extract_args()
+
         assert args.config is None
-        assert "$HOME" not in args.root_dir or "ita-llm-pipeline" in args.root_dir
+        assert args.root_dir == os.path.abspath(".")
+        assert args.output_dir == os.path.join(args.root_dir, "output")
 
-    def test_custom_config(self):
-        """Verifica il parsing dell'argomento --config."""
-        parser = extract_args()
-        args = parser.parse_args(["--config", "configs/custom.conf"])
-        
-        assert args.config == "configs/custom.conf"
-
-    def test_custom_root_dir(self):
-        """Verifica il parsing dell'argomento --root-dir."""
-        parser = extract_args()
-        args = parser.parse_args(["--root-dir", "/custom/path"])
-        
-        assert args.root_dir == "/custom/path"
-
-    def test_custom_output_dir(self):
-        """Verifica il parsing dell'argomento --output-dir."""
-        parser = extract_args()
-        args = parser.parse_args(["--output-dir", "/custom/output"])
-        
-        assert args.output_dir == "/custom/output"
-
-    def test_custom_rejected_dir(self):
-        """Verifica il parsing dell'argomento --rejected-dir."""
-        parser = extract_args()
-        args = parser.parse_args(["--rejected-dir", "/custom/rejected"])
-        
-        assert args.rejected_dir == "/custom/rejected"
-
-    def test_custom_csv_dir(self):
-        """Verifica il parsing dell'argomento --csv-dir."""
-        parser = extract_args()
-        args = parser.parse_args(["--csv-dir", "/custom/csv"])
-        
-        assert args.csv_dir == "/custom/csv"
-
-    def test_all_arguments_together(self):
-        """Verifica il parsing di tutti gli argomenti insieme."""
-        parser = extract_args()
-        args = parser.parse_args([
-            "--config", "my.conf",
-            "--root-dir", "/root",
-            "--output-dir", "/output",
-            "--rejected-dir", "/rejected",
-            "--csv-dir", "/csv",
-        ])
-        
-        assert args.config == "my.conf"
-        assert args.root_dir == "/root"
-        assert args.output_dir == "/output"
-        assert args.rejected_dir == "/rejected"
-        assert args.csv_dir == "/csv"
-
-    def test_docker_detection(self, monkeypatch, temp_dir: Path):
-        """Verifica il rilevamento dell'ambiente Docker."""
-        # Simula di essere in Docker creando /app/src
-        app_src = temp_dir / "app" / "src"
-        app_src.mkdir(parents=True)
-        
-        # Salva riferimento alla funzione originale prima del mock
+    def test_default_values_inside_docker(self, monkeypatch):
         original_exists = os.path.exists
-        
-        def mock_exists(path):
+
+        def fake_exists(path):
             if path == "/app/src":
                 return True
             return original_exists(path)
-        
-        monkeypatch.setattr(os.path, "exists", mock_exists)
-        
-        parser = extract_args()
-        args = parser.parse_args([])
-        
+
+        monkeypatch.setattr(config_loader.os.path, "exists", fake_exists)
+        monkeypatch.setattr(sys, "argv", ["prog"])
+
+        args = config_loader.extract_args()
+
         assert args.root_dir == "/app"
         assert args.output_dir == "/app/output"
 
+    def test_custom_arguments_are_parsed(self, monkeypatch):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "prog",
+                "--config",
+                "configs/custom.conf",
+                "--root-dir",
+                "/tmp/root",
+                "--output-dir",
+                "/tmp/output",
+                "--rejected-dir",
+                "/tmp/rejected",
+                "--csv-dir",
+                "/tmp/csv",
+                "--feature-dir",
+                "/tmp/feature",
+                "--model-path",
+                "/tmp/model.joblib",
+            ],
+        )
 
-# =============================================================================
-# Test di integrazione config + args
-# =============================================================================
+        args = config_loader.extract_args()
 
-class TestConfigAndArgsIntegration:
-    """Test di integrazione tra config e argomenti."""
+        assert args.config == "configs/custom.conf"
+        assert args.root_dir == "/tmp/root"
+        assert args.output_dir == "/tmp/output"
+        assert args.rejected_dir == "/tmp/rejected"
+        assert args.csv_dir == "/tmp/csv"
+        assert args.feature_dir == "/tmp/feature"
+        assert args.model_path == "/tmp/model.joblib"
 
-    def test_env_vars_priority(self, temp_dir: Path, clean_env):
-        """Verifica che le variabili d'ambiente abbiano priorità sugli argomenti."""
-        # Crea un config con OUTPUT_DIR
-        config_content = "OUTPUT_DIR=/from/config"
-        config_path = temp_dir / "test.conf"
-        config_path.write_text(config_content)
-        
-        # Carica il config
-        load_config(str(config_path))
-        
-        # Verifica che la variabile d'ambiente sia impostata
-        assert os.environ.get("OUTPUT_DIR") == "/from/config"
-        
-        # Nel codice reale, questo valore avrebbe priorità sull'argomento --output-dir
-        
-        # Cleanup
-        del os.environ["OUTPUT_DIR"]
+
+class TestGetConfig:
+    def test_builds_paths_and_creates_directories(self, monkeypatch, temp_dir, clean_env):
+        root_dir = temp_dir / "workspace"
+        output_dir = temp_dir / "output"
+
+        monkeypatch.setattr(
+            config_loader,
+            "extract_args",
+            lambda: SimpleNamespace(
+                root_dir=str(root_dir),
+                output_dir=str(output_dir),
+                rejected_dir=None,
+                csv_dir=None,
+                feature_dir=None,
+                model_path=str(temp_dir / "models" / "custom.joblib"),
+                config=None,
+            ),
+        )
+        default_model_path = root_dir / "models" / "spam_lgbm.joblib"
+        monkeypatch.setattr(config_loader.os.path, "exists", lambda path: path != str(default_model_path))
+
+        config = config_loader.get_config()
+
+        assert config["DATA_DIR"] == str(root_dir / "data")
+        assert config["OUTPUT_DIR"] == str(output_dir)
+        assert config["REJECTED_DIR"] == str(output_dir / "rejected")
+        assert config["CSV_DIR"] == str(output_dir / "csv")
+        assert config["FEATURE_DIR"] == str(output_dir / "feature")
+        assert config["MODEL_PATH"] == str(default_model_path)
+        assert Path(config["OUTPUT_DIR"]).exists()
+        assert Path(config["REJECTED_DIR"]).exists()
+        assert Path(config["CSV_DIR"]).exists()
+        assert Path(config["FEATURE_DIR"]).exists()
+        assert Path(config["MODEL_PATH"]).parent.exists()
+
+    def test_environment_variables_override_cli_defaults(self, monkeypatch, temp_dir, clean_env):
+        cli_root = temp_dir / "cli-root"
+        cli_output = temp_dir / "cli-output"
+        env_output = temp_dir / "env-output"
+
+        monkeypatch.setenv("ROOT_DIR", str(temp_dir / "env-root"))
+        monkeypatch.setenv("OUTPUT_DIR", str(env_output))
+        monkeypatch.setenv("REJECTED_DIR", str(temp_dir / "env-rejected"))
+        monkeypatch.setenv("FEATURE_DIR", str(temp_dir / "env-feature"))
+        monkeypatch.setenv("CSV_DIR", str(temp_dir / "env-csv"))
+        monkeypatch.setenv("MODEL_PATH", str(temp_dir / "env-models" / "spam.joblib"))
+
+        monkeypatch.setattr(
+            config_loader,
+            "extract_args",
+            lambda: SimpleNamespace(
+                root_dir=str(cli_root),
+                output_dir=str(cli_output),
+                rejected_dir=str(temp_dir / "cli-rejected"),
+                csv_dir=str(temp_dir / "cli-csv"),
+                feature_dir=str(temp_dir / "cli-feature"),
+                model_path=str(temp_dir / "cli-models" / "spam.joblib"),
+                config=None,
+            ),
+        )
+        monkeypatch.setattr(config_loader.os.path, "exists", lambda path: False)
+
+        config = config_loader.get_config()
+
+        assert config["OUTPUT_DIR"] == str(env_output)
+        assert config["REJECTED_DIR"] == str(temp_dir / "env-rejected")
+        assert config["FEATURE_DIR"] == str(temp_dir / "env-feature")
+        assert config["CSV_DIR"] == str(temp_dir / "env-csv")
+        assert config["MODEL_PATH"] == str(temp_dir / "env-models" / "spam.joblib")
+
+
+class TestMainEntrypoint:
+    def test_main_wires_pipeline_executor_and_output_analysis(self, monkeypatch):
+        captured = {}
+        fake_config = {
+            "DATA_DIR": "/tmp/data",
+            "OUTPUT_DIR": "/tmp/output",
+            "REJECTED_DIR": "/tmp/output/rejected",
+            "FEATURE_DIR": "/tmp/output/feature",
+            "MODEL_PATH": "/tmp/models/spam_lgbm.joblib",
+        }
+        fake_pipeline = ["reader", "filter", "writer"]
+
+        class FakeExecutor:
+            def __init__(self, pipeline, tasks, workers):
+                captured["pipeline"] = pipeline
+                captured["tasks"] = tasks
+                captured["workers"] = workers
+
+            def run(self):
+                captured["run_called"] = True
+
+        monkeypatch.setattr(main, "get_config", lambda: fake_config)
+        monkeypatch.setattr(
+            main,
+            "build_italian_cleaning_pipeline",
+            lambda data_dir, output_dir, rejected_dir, model_path: fake_pipeline,
+        )
+        monkeypatch.setattr(main, "LocalPipelineExecutor", FakeExecutor)
+        monkeypatch.setattr(
+            main,
+            "output_classification",
+            lambda rejected_dir, output_dir: captured.setdefault(
+                "classification_args",
+                (rejected_dir, output_dir),
+            ),
+        )
+
+        main.main()
+
+        assert captured["pipeline"] == fake_pipeline
+        assert captured["tasks"] == 1
+        assert captured["workers"] == 1
+        assert captured["run_called"] is True
+        assert captured["classification_args"] == (
+            fake_config["REJECTED_DIR"],
+            fake_config["OUTPUT_DIR"],
+        )
