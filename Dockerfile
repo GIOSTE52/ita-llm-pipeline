@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
 COPY configs/ ./configs/
+COPY models/ ./models
 
 RUN mkdir -p /app/output /app/logs 
 
