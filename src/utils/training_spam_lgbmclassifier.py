@@ -14,7 +14,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from blocks.spam_classifier.spam_classifier import SpamClassifier
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Training del classificatore spam (Tesi Silvio)")
+    parser = argparse.ArgumentParser(description="Training del classificatore spam")
     
     # Percorsi di default basati sulla tua struttura attuale
     parser.add_argument(
