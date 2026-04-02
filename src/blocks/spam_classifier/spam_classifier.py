@@ -98,7 +98,21 @@ class SpamClassifier(PipelineStep):
         if not available:
             raise ValueError("Nessuna feature valida trovata nel CSV")
         return available
+    
+    #serve per rimuovere features non utili al training o che renderebbero troppo facile il training
+    @staticmethod
+    def _drop_bad_features(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
+        constant_cols = [c for c in X.columns if X[c].nunique(dropna=False) <= 1]
+        near_constant_cols = []
+        for c in X.columns:
+            vc = X[c].value_counts(normalize=True, dropna=False)
+            if not vc.empty and vc.iloc[0] >= 0.995:
+                near_constant_cols.append(c)
+        remove_cols = sorted(set(constant_cols))
+        keep = [c for c in X.columns if c not in remove_cols]
+        return X[keep].copy(), remove_cols, sorted(set(near_constant_cols) - set(remove_cols))
 
+    #allena il modello sui dati estratti dal csv.
     @staticmethod
     def train_from_csv(
         csv_path: str,
@@ -125,11 +139,11 @@ class SpamClassifier(PipelineStep):
         X = df[feat_names].apply(pd.to_numeric, errors="coerce").fillna(0.0)
         y = df[label_column].map(LABEL_MAP)
 
-        if y.isna().any():
-            invalid = df[label_column][y.isna()].unique().tolist()
-            raise ValueError(f"Valori label non validi: {invalid}. Ammessi: ham, spam")
-        if y.nunique() < 2:
-            raise ValueError("Il training richiede entrambe le classi: ham e spam")
+        # remove constant junk before split
+        X, dropped_constants, near_constants = SpamClassifier._drop_bad_features(X)
+        feat_names = X.columns.tolist()
+        if len(feat_names) < 2:
+            raise ValueError("Dopo la pulizia restano troppo poche feature")
 
         X_train, X_test, y_train, y_test = train_test_split(
             X,
@@ -147,8 +161,15 @@ class SpamClassifier(PipelineStep):
             objective="binary",
             n_estimators=n_estimators,
             learning_rate=learning_rate,
+            num_leaves=15,
+            min_child_samples=10,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            reg_alpha=0.2,
+            reg_lambda=0.2,
             random_state=random_state,
             class_weight="balanced",
+            verbosity=-1,
         )
         model.fit(X_train_s, y_train)
 
@@ -159,6 +180,10 @@ class SpamClassifier(PipelineStep):
         print("SPAM CLASSIFICATION REPORT")
         print("=" * 60)
         print(f"Feature usate nel training: {len(feat_names)}")
+        if dropped_constants:
+            print(f"Feature costanti rimosse: {', '.join(dropped_constants)}")
+        if near_constants:
+            print(f"Feature quasi costanti rilevate: {', '.join(near_constants)}")
         print(classification_report(y_test, y_pred, target_names=["ham", "spam"]))
         print("\nConfusion Matrix:")
         print(confusion_matrix(y_test, y_pred))

@@ -81,7 +81,17 @@ URL_SHORTENERS: Set[str] = {
 
 
 WORD_RE: Pattern[str] = re.compile(r"\b[\wÀ-ÖØ-öø-ÿ'-]+\b", re.UNICODE)
-URL_RE: Pattern[str] = re.compile(r"(?:https?://|www\.)[^\s<>()\[\]{}\"']+", re.IGNORECASE)
+# - https:/, www., domini nudi tipo .win o name.com/path
+URL_RE: Pattern[str] = re.compile(r"""
+    (?:
+        \bhttps?:/{1,2}[^\s<>()\[\]{}"']+ |
+        \bwww\.[^\s<>()\[\]{}"']+ |
+        \b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+
+        (?:[a-z]{2,})(?:/[^\s<>()\[\]{}"']*)?
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 EMAIL_RE: Pattern[str] = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 AMOUNT_RE: Pattern[str] = re.compile(
     r"(?:€\s?\d+[\d.,]*|\d+[\d.,]*\s?€|\b\d+[\d.,]*\s?(?:euro|eur)\b)",
@@ -106,7 +116,7 @@ class KeywordBundle:
     unsubscribe_keywords: int
     promo_code_keywords: int
 
-
+# normalizza i testi
 def normalize_text(text: str) -> str:
     if not text:
         return ""
@@ -114,6 +124,24 @@ def normalize_text(text: str) -> str:
     normalized = unicodedata.normalize("NFKD", lowered)
     stripped = "".join(ch for ch in normalized if not unicodedata.combining(ch))
     return " ".join(stripped.split())
+
+# normalizza url
+def normalize_url(url: str) -> str:
+    if not url:
+        return ""
+    cleaned = url.strip().strip(".,;:!?()[]{}<>\"'")
+    cleaned = re.sub(r"^https:/([^/])", r"https://\1", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^http:/([^/])", r"http://\1", cleaned, flags=re.IGNORECASE)
+    return cleaned
+
+
+# normalizza casi di termini attaccati a segni
+def normalize_for_matching(text: str) -> str:
+    normalized = normalize_text(text)
+    normalized = normalized.replace("'", " ")
+    normalized = re.sub(r"[^0-9a-zA-ZÀ-ÖØ-öø-ÿ]+", " ", normalized, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", normalized).strip()
+
 
 # conta parole o frasi target
 def count_term_matches(normalized_text: str, terms: Iterable[str]) -> int:

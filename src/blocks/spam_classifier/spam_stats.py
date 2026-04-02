@@ -14,18 +14,18 @@ from .spam_keywords import (
     unique_token_count,
 )
 
-
+#controllo su non-stringhe o stringhe vuote
 def _safe_text(value) -> str:
     return value if isinstance(value, str) else ""
 
-
+# converte tutti i numeri in float
 def _safe_float(value, default=0.0) -> float:
     try:
         return float(value)
     except Exception:
         return default
 
-
+# normalizzazione della label spam
 def _normalize_spam_label(raw_label: Optional[str]) -> str:
     value = _safe_text(raw_label).strip().lower()
     if value in {"ham", "not_spam", "non_spam", "legit"}:
@@ -42,7 +42,7 @@ def _extract_spam_label(metadata: dict) -> str:
             return label
     return ""
 
-
+# calcolo feature sui caratteri di 'text'
 def _basic_char_stats(text: str) -> Dict[str, float]:
     char_count = len(text)
     if char_count == 0:
@@ -99,7 +99,7 @@ def _basic_char_stats(text: str) -> Dict[str, float]:
         "currency_symbol_count": float(currency_symbol_count),
     }
 
-
+# estrae le stats da 'doc'
 def extract_spam_features(doc) -> Dict[str, float | str]:
     text = _safe_text(getattr(doc, "text", ""))
     metadata = getattr(doc, "metadata", {}) or {}
@@ -117,12 +117,7 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
 
     lang = _safe_text(metadata.get("language")).lower()
     lang_score = _safe_float(metadata.get("language_score"), 0.0)
-    url_meta = _safe_text(metadata.get("url"))
-    file_path = _safe_text(metadata.get("file_path"))
-    annotation_source = _safe_text(metadata.get("annotation_source")).lower()
-    minhash_cluster_size = _safe_float(metadata.get("minhash_cluster_size"), 0.0)
-    spam_subtype = _safe_text(metadata.get("spam_subtype")).lower()
-
+    
     url_count = float(pat["url_count"])
     email_count = float(pat["email_count"])
 
@@ -167,14 +162,6 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "promo_keyword_hits": float(kw.promo_code_keywords),
         "lang_score": lang_score,
         "lang_is_ita": 1.0 if lang in {"ita", "it", "italian"} else 0.0,
-        "has_url_meta": 1.0 if url_meta else 0.0,
-        "is_local_path": 1.0 if file_path.startswith("local://") else 0.0,
-        "annotation_manual": 1.0 if annotation_source == "manual" else 0.0,
-        "minhash_cluster_size": minhash_cluster_size,
-        "spam_subtype_school": 1.0 if spam_subtype == "school" else 0.0,
-        "spam_subtype_phishing": 1.0 if spam_subtype == "phishing" else 0.0,
-        "spam_subtype_marketing": 1.0 if spam_subtype == "marketing" else 0.0,
-        "spam_subtype_scam": 1.0 if spam_subtype == "scam" else 0.0,
     }
     return features
 
@@ -220,17 +207,10 @@ FEATURE_COLUMNS: List[str] = [
     "promo_keyword_hits",
     "lang_score",
     "lang_is_ita",
-    "has_url_meta",
-    "is_local_path",
-    "annotation_manual",
-    "minhash_cluster_size",
-    "spam_subtype_school",
-    "spam_subtype_phishing",
-    "spam_subtype_marketing",
-    "spam_subtype_scam",
 ]
 
-
+# è il blocco chiamato dalla pipeline
+# estrae i documenti, calcola le features e le insersce nel csv
 class SpamFeatureExtractor(PipelineStep):
     name = "Spam Feature Extractor"
 
@@ -262,16 +242,6 @@ class SpamFeatureCsvWriter(PipelineStep):
             writer = csv.DictWriter(f, fieldnames=FEATURE_COLUMNS)
             if write_header:
                 writer.writeheader()
-
             for doc in data:
-                metadata = getattr(doc, "metadata", {}) or {}
-                row = {}
-                for col in FEATURE_COLUMNS:
-                    if col == "doc_id":
-                        row[col] = metadata.get("doc_id") or getattr(doc, "id", "") or ""
-                    elif col in {"target_label", "spam_target_label"}:
-                        row[col] = metadata.get(col) or metadata.get("spam_target_label") or metadata.get("target_label") or ""
-                    else:
-                        row[col] = metadata.get(col, 0.0)
-                writer.writerow(row)
+                writer.writerow(extract_spam_features(doc))
                 yield doc
