@@ -13,7 +13,7 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, model_pa
     """
     return [
         # 1. Lettura
-        get_jsonl_reader(data_dir),
+        get_jsonl_reader(data_dir,  pattern = "test/*.jsonl"),
         
         # 2. Filtro Lingua (Ora richiamato dal tuo modulo filters)
         get_language_filter(rejected_dir, threshold=0.75),
@@ -51,11 +51,10 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, model_pa
 
         # 7. Classificazione italiana con QualityClassifier
         ItalianClassification(
-            # Da completare una volta salvato il modello
             model_path = os.path.join(model_path, "lgbm_quality_model.joblib"),
             rejected_dir = rejected_dir,
             output_folder = output_dir,
-            threshold = 0.7
+            threshold = 0.65
         ),
 
         # 7. Scrittura Finale
