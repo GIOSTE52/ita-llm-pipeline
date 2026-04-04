@@ -449,7 +449,8 @@ class DocStatsCsv(DocStats):
             logger.info(f"📊 Totale documenti: {len(self.all_docs_stats)}")
             logger.info(f"✨ GOOD: {good_count} ({100*good_count/len(self.all_docs_stats):.1f}%)")
             logger.info(f"❌ BAD:  {bad_count} ({100*bad_count/len(self.all_docs_stats):.1f}%)")
-            logger.info(f"📋 Colonne: {len(fieldnames)} features")
+            logger.info(f"📋 Colonne: {len(fieldnames)}")
+            logger.info(f"Features: {len(fieldnames)-2}")
         
         except Exception as e:
             logger.error(f"❌ Errore nel salvataggio CSV: {e}")
