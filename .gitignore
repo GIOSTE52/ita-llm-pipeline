@@ -60,47 +60,12 @@ torch_cache/
 # Secrets / environment
 .env
 .env.*
-*.secret
-*.key
-*.pem
-*.crt
 credentials.json
-secrets.json
 
 # IDEs / editors
 .vscode/
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.swp
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Node (if presenti)
-node_modules/
-npm-debug.log
-yarn-error.log
-
-# Logs and temporary files
-*.log
-*.tmp
-*.temp
-tmp/
-
-# Large files (aggiungi estensioni specifiche se necessario)
-*.zip
-*.tar.gz
-*.tgz
-*.rar
 
 # Optional: evita di committare file di config locali
-local_settings.py
-config/*.local
-
-
-data/train/rpDataset.jsonl
+config/stefano.conf
+config/silvio.conf
+config/gabriele.conf
