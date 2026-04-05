@@ -102,3 +102,5 @@ tmp/
 local_settings.py
 config/*.local
 
+
+data/train/rpDataset.jsonl
