@@ -1,4 +1,4 @@
-from ..blocks.classifiers import QualityClassifier
+from ..src.blocks.classifiers import QualityClassifier
 import os
 
 """
