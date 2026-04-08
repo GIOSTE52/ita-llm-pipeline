@@ -4,13 +4,14 @@ Script per valutare il classificatore di qualità su un dataset di test scritto 
 Sono necessarie le label, quindi bisogna generare il CSV su un dataset con label presenti.
 
 comando:
-    python scripts/evaluate_model.py --model models/lgbm_quality_model.joblib --test-csv notebooks/doc_stats_per_file.csv --output-dir evaluation --threshold 0.7
+    python3 scripts/evaluate_model.py --model models/lgbm_quality_model.joblib --test-csv notebooks/doc_stats_per_file.csv --output-dir evaluation --threshold 0.7 --compare-models
 
 Questo script:
 1. Carica il modello addestrato
 2. Valuta il modello su un dataset di test
-3. Stampa le statistiche a schermo
-4. Salva un report dettagliato in JSON e HTML
+3. Opzionalmente confronta piu modelli con cross validation
+4. Stampa le statistiche a schermo
+5. Salva un report dettagliato in JSON e HTML
 """
 
 import argparse
@@ -21,6 +22,54 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from blocks.classifiers import QualityClassifier
+
+
+def print_model_comparison(comparison_result: dict) -> None:
+    """Stampa un confronto compatto tra i modelli valutati in cross validation."""
+    print("\n" + "=" * 108)
+    print(
+        f"CONFRONTO MODELLI ({comparison_result['cv_folds']}-fold stratified CV)"
+    )
+    print("=" * 108)
+    print(
+        "Baseline: "
+        f"{comparison_result['baseline_model_name']} | "
+        f"Soglia: {comparison_result['threshold']}"
+    )
+    print(
+        f"{'Modello':24}"
+        f"{'ROC-AUC CV':>16}"
+        f"{'F1 CV':>16}"
+        f"{'Bal. Acc CV':>16}"
+        f"{'Delta ROC-AUC':>18}"
+        f"{'Delta F1':>12}"
+    )
+    print("-" * 108)
+    for row in comparison_result["models"]:
+        roc_auc_cell = f"{row['roc_auc_mean']:.4f} ± {row['roc_auc_std']:.4f}"
+        f1_cell = f"{row['f1_score_mean']:.4f} ± {row['f1_score_std']:.4f}"
+        bal_acc_cell = (
+            f"{row['balanced_accuracy_mean']:.4f} ± "
+            f"{row['balanced_accuracy_std']:.4f}"
+        )
+        delta_roc_auc_cell = f"{row['delta_vs_baseline']['roc_auc_mean']:+.4f}"
+        delta_f1_cell = f"{row['delta_vs_baseline']['f1_score_mean']:+.4f}"
+        print(
+            f"{row['model_name']:24}"
+            f"{roc_auc_cell:>16}"
+            f"{f1_cell:>16}"
+            f"{bal_acc_cell:>16}"
+            f"{delta_roc_auc_cell:>18}"
+            f"{delta_f1_cell:>12}"
+        )
+    print("-" * 108)
+    winner = comparison_result["winner"]
+    print(
+        "Miglior modello per ROC-AUC medio: "
+        f"{winner['model_name']} "
+        f"(ROC-AUC {winner['roc_auc_mean']:.4f}, F1 {winner['f1_score_mean']:.4f})"
+    )
+    print("=" * 108 + "\n")
 
 
 def main():
@@ -53,6 +102,37 @@ def main():
         default="label",
         help="Nome della colonna con le label nel CSV (default 'label')"
     )
+    parser.add_argument(
+        "--compare-models",
+        action="store_true",
+        help="Esegue anche un benchmark in cross validation con modelli alternativi."
+    )
+    parser.add_argument(
+        "--comparison-csv",
+        default=None,
+        help="CSV etichettato da usare per la cross validation. Se omesso usa --test-csv."
+    )
+    parser.add_argument(
+        "--cv-folds",
+        type=int,
+        default=5,
+        help="Numero di fold per la cross validation (default 5)."
+    )
+    parser.add_argument(
+        "--cv-random-state",
+        type=int,
+        default=42,
+        help="Seed per split e modelli della cross validation (default 42)."
+    )
+    parser.add_argument(
+        "--cv-models",
+        nargs="+",
+        default=None,
+        help=(
+            "Lista opzionale di modelli da confrontare. "
+            "Valori supportati: lightgbm random_forest extra_trees logistic_regression"
+        )
+    )
 
     args = parser.parse_args()
 
@@ -74,12 +154,27 @@ def main():
         )
         print("Modello caricato con successo!")
 
+        comparison_result = None
+        if args.compare_models:
+            comparison_csv = args.comparison_csv or args.test_csv
+            print("\nBenchmark cross validation in corso...")
+            comparison_result = QualityClassifier.cross_validate_models(
+                csv_path=comparison_csv,
+                label_column=args.label_column,
+                threshold=args.threshold,
+                cv_folds=args.cv_folds,
+                random_state=args.cv_random_state,
+                model_names=args.cv_models,
+            )
+            print_model_comparison(comparison_result)
+
         # Valuta il modello
         print("\nValutazione in corso...")
         result = classifier.evaluate(
             csv_path=args.test_csv,
             label_column=args.label_column,
-            output_dir=args.output_dir
+            output_dir=args.output_dir,
+            comparison_result=comparison_result,
         )
 
         print("\nValutazione completata con successo!")
