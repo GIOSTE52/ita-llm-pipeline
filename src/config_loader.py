@@ -35,7 +35,7 @@ def get_config():
         "OUTPUT_DIR": OUTPUT_DIR,
         "REJECTED_DIR": os.environ.get("REJECTED_DIR", args.rejected_dir or os.path.join(OUTPUT_DIR, "rejected")),
         "FEATURE_DIR": os.environ.get("FEATURE_DIR", args.feature_dir or os.path.join(OUTPUT_DIR, "feature")),
-        "CSV_DIR": os.environ.get("CSV_DIR", args.csv_dir or os.path.join(OUTPUT_DIR, "csv")),
+        # "CSV_DIR": os.environ.get("CSV_DIR", args.csv_dir or os.path.join(OUTPUT_DIR, "csv")),
         "MODEL_PATH": os.environ.get("MODEL_PATH", os.path.join(ROOT_DIR, "models")),
     }
 

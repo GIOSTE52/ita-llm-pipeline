@@ -46,5 +46,3 @@ def output_classification(rejected_dir, output_base_dir):
     f_good.close()
     f_bad.close()
     print("✅ Smistamento eseguito con successo guardando i metadati.")
-
-# Definire nuova funzione per la gestione dei grafici in output (csv, plot, ecc...)
