@@ -386,6 +386,8 @@ class QualityClassifier(PipelineStep):
     ) -> dict:
         """
         Valuta il modello su un dataset di test contenuto in un CSV.
+        Il CSV che contiene il dataset di test viene generato eseguendo la pipeline con lettura in "train/*.jsonl"
+        oppure utilizzando il file CSV salvato in notebooks
 
         Calcola tutte le metriche importanti: accuracy, precision, recall, F1,
         ROC-AUC, confusion matrix, e feature importance basata su permutazioni.
@@ -414,17 +416,17 @@ class QualityClassifier(PipelineStep):
             - "feature_names": Nomi delle feature impiegate
             - "timestamp": Data/ora della valutazione
         """
-        # Carica il dataset
+        # Carico il dataset
         df = pd.read_csv(csv_path)
         
-        # Verifica colonne
+        # Verifico colonne
         missing_cols = set(self.feature_names) - set(df.columns)
         if missing_cols:
             raise ValueError(f"Colonne mancanti nel CSV: {missing_cols}")
         if label_column not in df.columns:
             raise ValueError(f"Colonna label '{label_column}' non trovata nel CSV")
 
-        # Estrai feature e label
+        # Estraggo feature e label
         X = df[self.feature_names]
         y = df[label_column].map(LABEL_MAP)
         
@@ -434,7 +436,7 @@ class QualityClassifier(PipelineStep):
                 f"Valori label non validi: {invalid}. Ammessi: 'good', 'bad'."
             )
 
-        # Scala le feature usando lo scaler del modello
+        # Scalo le feature usando lo scaler del modello
         X_scaled = self.scaler.transform(X)
         X_scaled = pd.DataFrame(X_scaled, columns=self.feature_names)
 
@@ -477,7 +479,7 @@ class QualityClassifier(PipelineStep):
         fpr, tpr, _ = roc_curve(y, y_pred_proba)
         precision_vals, recall_vals, _ = precision_recall_curve(y, y_pred_proba)
 
-        # Stampa report formattato
+        # Stampo report formattato
         self._print_evaluation_report(
             accuracy=accuracy,
             balanced_acc=balanced_acc,
@@ -489,7 +491,7 @@ class QualityClassifier(PipelineStep):
             csv_path=csv_path,
         )
 
-        # Prepara il risultato
+        # Preparo il risultato
         result = {
             "accuracy": round(accuracy, 4),
             "balanced_accuracy": round(balanced_acc, 4),
@@ -504,7 +506,7 @@ class QualityClassifier(PipelineStep):
             "timestamp": datetime.now().isoformat(),
         }
 
-        # Salva i report se specificato output_dir
+        # Salvo i report se specificato output_dir
         if output_dir:
             self.save_evaluation_report(result, output_dir, importance_df, fpr, tpr, precision_vals, recall_vals)
 
@@ -624,9 +626,12 @@ class QualityClassifier(PipelineStep):
             precision_vals,
             recall_vals,
     ) -> str:
-        """Genera un report HTML interattivo."""
+        """Genera un report HTML"""
         cm = evaluation_result["confusion_matrix"]
-        
+        roc_points = json.dumps([{"x": float(f), "y": float(t)} for f, t in zip(fpr, tpr)])
+        pr_points = json.dumps([{"x": float(r), "y": float(p)} for r, p in zip(recall_vals, precision_vals)])
+        importance_total = float(importance_df["importance_mean"].sum()) or 1.0
+
         html = f"""
 <!DOCTYPE html>
 <html lang="it">
@@ -636,86 +641,137 @@ class QualityClassifier(PipelineStep):
     <title>Report Valutazione Modello</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        :root {{
+            --bg: #f3f1ec;
+            --surface: #fffdf9;
+            --border: #d8d1c7;
+            --text: #1f1f1c;
+            --muted: #666157;
+            --accent: #2f5d50;
+            --accent-soft: #e5efe9;
+            --danger: #8e3b2f;
+            --danger-soft: #f4e5e2;
+        }}
         body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f5f5;
+            font-family: Georgia, "Times New Roman", serif;
+            background: var(--bg);
+            color: var(--text);
             margin: 0;
-            padding: 20px;
+            padding: 32px 20px;
         }}
         .container {{
-            max-width: 1200px;
+            max-width: 980px;
             margin: 0 auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            padding: 30px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 32px;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.04);
         }}
         h1 {{
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
+            margin: 0 0 12px 0;
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
         }}
         h2 {{
-            color: #34495e;
-            margin-top: 30px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #ecf0f1;
+            margin: 32px 0 16px 0;
+            font-size: 1.15rem;
+            font-weight: 600;
+            border-top: 1px solid var(--border);
+            padding-top: 24px;
+        }}
+        p {{
+            line-height: 1.6;
+        }}
+        .intro {{
+            color: var(--muted);
+            margin: 0 0 24px 0;
+        }}
+        .meta {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin: 20px 0 8px 0;
+        }}
+        .meta-item {{
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #faf8f4;
+        }}
+        .meta-label {{
+            display: block;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 4px;
         }}
         .metrics-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
             margin: 20px 0;
         }}
         .metric-card {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            background: #fcfbf8;
         }}
         .metric-card h3 {{
-            margin: 0 0 10px 0;
-            font-size: 14px;
-            opacity: 0.9;
+            margin: 0 0 8px 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--muted);
         }}
         .metric-card .value {{
-            font-size: 32px;
-            font-weight: bold;
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--text);
         }}
         .chart-container {{
             position: relative;
-            height: 400px;
-            margin: 30px 0;
+            height: 320px;
+            margin: 18px 0;
             padding: 20px;
-            background: #f9f9f9;
-            border-radius: 8px;
+            background: #faf8f4;
+            border: 1px solid var(--border);
+            border-radius: 10px;
         }}
         .confusion-matrix {{
-            text-align: center;
             margin: 20px 0;
         }}
         .confusion-matrix table {{
-            margin: 0 auto;
+            width: 100%;
             border-collapse: collapse;
         }}
+        .confusion-matrix th,
         .confusion-matrix td {{
-            border: 2px solid #3498db;
-            padding: 15px;
-            font-size: 16px;
-            font-weight: bold;
-            width: 120px;
+            border: 1px solid var(--border);
+            padding: 14px;
+            text-align: center;
         }}
-        .confusion-matrix td:first-child {{
-            background: #ecf0f1;
+        .confusion-matrix th {{
+            background: #f6f2eb;
+            font-weight: 600;
         }}
-        .confusion-matrix tr:first-child td {{
-            background: #ecf0f1;
+        .confusion-matrix .row-label {{
+            text-align: left;
+            background: #f6f2eb;
+            font-weight: 600;
         }}
-        .tn {{ background: #2ecc71; color: white; }}
-        .fp {{ background: #e74c3c; color: white; }}
-        .fn {{ background: #e67e22; color: white; }}
-        .tp {{ background: #27ae60; color: white; }}
+        .tn, .tp {{
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-weight: 700;
+        }}
+        .fp, .fn {{
+            background: var(--danger-soft);
+            color: var(--danger);
+            font-weight: 700;
+        }}
         .features-table {{
             width: 100%;
             border-collapse: collapse;
@@ -724,115 +780,133 @@ class QualityClassifier(PipelineStep):
         .features-table th, .features-table td {{
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--border);
         }}
         .features-table th {{
-            background: #3498db;
-            color: white;
+            background: #f6f2eb;
+            color: var(--text);
+            font-weight: 600;
         }}
-        .features-table tr:hover {{
-            background: #f5f5f5;
+        .feature-share {{
+            font-size: 0.85rem;
+            color: var(--muted);
         }}
         .progress-bar {{
             width: 100%;
-            height: 20px;
-            background: #ecf0f1;
-            border-radius: 10px;
+            height: 10px;
+            background: #e7e1d7;
+            border-radius: 999px;
             overflow: hidden;
-            margin: 5px 0;
+            margin-top: 6px;
         }}
         .progress-fill {{
             height: 100%;
-            background: linear-gradient(90deg, #3498db, #2ecc71);
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            padding-right: 10px;
-            color: white;
-            font-weight: bold;
-            font-size: 12px;
+            background: var(--accent);
         }}
         .timestamp {{
-            color: #7f8c8d;
-            font-size: 12px;
-            margin-top: 20px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-top: 28px;
             padding-top: 20px;
-            border-top: 1px solid #ecf0f1;
+            border-top: 1px solid var(--border);
+        }}
+        @media (max-width: 640px) {{
+            body {{
+                padding: 16px;
+            }}
+            .container {{
+                padding: 20px;
+            }}
+            .chart-container {{
+                height: 260px;
+            }}
         }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📊 Report di Valutazione del Modello</h1>
-        <p><strong>Dataset:</strong> {evaluation_result['csv_path']}</p>
-        <p><strong>Modello:</strong> {self.model_path}</p>
-        <p><strong>Soglia:</strong> {evaluation_result['threshold']}</p>
-        
-        <h2>🎯 Metriche Principali</h2>
+        <h1>Report di valutazione del modello</h1>
+        <p class="intro">Sintesi delle metriche principali, della matrice di confusione e delle feature piu rilevanti emerse durante la valutazione.</p>
+
+        <div class="meta">
+            <div class="meta-item">
+                <span class="meta-label">Dataset</span>
+                <strong>{evaluation_result['csv_path']}</strong>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Modello</span>
+                <strong>{self.model_path}</strong>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Soglia</span>
+                <strong>{evaluation_result['threshold']}</strong>
+            </div>
+        </div>
+
+        <h2>Metriche principali</h2>
         <div class="metrics-grid">
             <div class="metric-card">
                 <h3>Accuracy</h3>
                 <div class="value">{evaluation_result['accuracy']:.2%}</div>
             </div>
-            <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <div class="metric-card">
                 <h3>Balanced Accuracy</h3>
                 <div class="value">{evaluation_result['balanced_accuracy']:.2%}</div>
             </div>
-            <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <div class="metric-card">
                 <h3>F1-Score</h3>
                 <div class="value">{evaluation_result['f1_score']:.4f}</div>
             </div>
-            <div class="metric-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+            <div class="metric-card">
                 <h3>ROC-AUC</h3>
                 <div class="value">{evaluation_result['roc_auc']:.4f}</div>
             </div>
         </div>
 
-        <h2>🔲 Matrice di Confusione</h2>
+        <h2>Confusion Matrix</h2>
         <div class="confusion-matrix">
             <table>
                 <tr>
-                    <td></td>
-                    <td><strong>Pred: Bad</strong></td>
-                    <td><strong>Pred: Good</strong></td>
+                    <th></th>
+                    <th>Predetto bad</th>
+                    <th>Predetto good</th>
                 </tr>
                 <tr>
-                    <td><strong>Real: Bad</strong></td>
+                    <td class="row-label">Reale bad</td>
                     <td class="tn">{cm[0][0]}</td>
                     <td class="fp">{cm[0][1]}</td>
                 </tr>
                 <tr>
-                    <td><strong>Real: Good</strong></td>
+                    <td class="row-label">Reale good</td>
                     <td class="fn">{cm[1][0]}</td>
                     <td class="tp">{cm[1][1]}</td>
                 </tr>
             </table>
         </div>
 
-        <h2>⭐ Top 10 Features (Importanza)</h2>
+        <h2>Top 10 feature per importanza</h2>
         <table class="features-table">
             <thead>
                 <tr>
                     <th>Feature</th>
-                    <th>Importanza Media</th>
-                    <th>Dev. Std.</th>
-                    <th>Visualizzazione</th>
+                    <th>Importanza media</th>
+                    <th>Dev. std.</th>
+                    <th>Peso relativo</th>
                 </tr>
             </thead>
             <tbody>
 """
-        for idx, row in importance_df.head(10).iterrows():
-            importance_pct = (row["importance_mean"] / importance_df["importance_mean"].sum()) * 100
+        for _, row in importance_df.head(10).iterrows():
+            importance_pct = (row["importance_mean"] / importance_total) * 100
             html += f"""
                 <tr>
                     <td><strong>{row['feature']}</strong></td>
                     <td>{row['importance_mean']:.6f}</td>
                     <td>±{row['importance_std']:.6f}</td>
                     <td>
+                        <div class="feature-share">{importance_pct:.1f}%</div>
                         <div class="progress-bar">
-                            <div class="progress-fill" style="width: {importance_pct}%;">
-                                {importance_pct:.1f}%
-                            </div>
+                            <div class="progress-fill" style="width: {importance_pct}%;"></div>
                         </div>
                     </td>
                 </tr>
@@ -841,21 +915,16 @@ class QualityClassifier(PipelineStep):
             </tbody>
         </table>
 
-        <h2>📈 Curve di Valutazione</h2>
+        <h2>Curve di valutazione</h2>
         <div class="chart-container">
             <canvas id="rocChart"></canvas>
         </div>
         <div class="chart-container">
             <canvas id="prChart"></canvas>
         </div>
-
-        <div class="timestamp">
-            <strong>Generato:</strong> """ + evaluation_result['timestamp'] + """
-        </div>
     </div>
 
     <script>
-        // ROC Curve
         const rocCtx = document.getElementById('rocChart').getContext('2d');
         new Chart(rocCtx, {
             type: 'scatter',
@@ -863,11 +932,11 @@ class QualityClassifier(PipelineStep):
                 datasets: [
                     {
                         label: 'ROC Curve',
-                        data: """ + json.dumps([{"x": float(f), "y": float(t)} for f, t in zip(fpr, tpr)]) + """,
-                        borderColor: '#3498db',
-                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        data: """ + roc_points + """,
+                        borderColor: '#2f5d50',
+                        backgroundColor: 'rgba(47, 93, 80, 0.08)',
                         fill: false,
-                        tension: 0.1,
+                        tension: 0,
                         showLine: true
                     }
                 ]
@@ -876,17 +945,31 @@ class QualityClassifier(PipelineStep):
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: true },
-                    title: { display: true, text: 'ROC Curve' }
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: 'ROC Curve',
+                        color: '#1f1f1c',
+                        font: { size: 16, family: 'Georgia, Times New Roman, serif' }
+                    }
                 },
                 scales: {
-                    x: { title: { display: true, text: 'False Positive Rate' }, min: 0, max: 1 },
-                    y: { title: { display: true, text: 'True Positive Rate' }, min: 0, max: 1 }
+                    x: {
+                        title: { display: true, text: 'False Positive Rate', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'True Positive Rate', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    }
                 }
             }
         });
 
-        // Precision-Recall Curve
         const prCtx = document.getElementById('prChart').getContext('2d');
         new Chart(prCtx, {
             type: 'scatter',
@@ -894,11 +977,11 @@ class QualityClassifier(PipelineStep):
                 datasets: [
                     {
                         label: 'Precision-Recall Curve',
-                        data: """ + json.dumps([{"x": float(r), "y": float(p)} for r, p in zip(recall_vals, precision_vals)]) + """,
-                        borderColor: '#e74c3c',
-                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        data: """ + pr_points + """,
+                        borderColor: '#8e3b2f',
+                        backgroundColor: 'rgba(142, 59, 47, 0.08)',
                         fill: false,
-                        tension: 0.1,
+                        tension: 0,
                         showLine: true
                     }
                 ]
@@ -907,12 +990,27 @@ class QualityClassifier(PipelineStep):
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: true },
-                    title: { display: true, text: 'Precision-Recall Curve' }
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: 'Precision-Recall Curve',
+                        color: '#1f1f1c',
+                        font: { size: 16, family: 'Georgia, Times New Roman, serif' }
+                    }
                 },
                 scales: {
-                    x: { title: { display: true, text: 'Recall' }, min: 0, max: 1 },
-                    y: { title: { display: true, text: 'Precision' }, min: 0, max: 1 }
+                    x: {
+                        title: { display: true, text: 'Recall', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Precision', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    }
                 }
             }
         });

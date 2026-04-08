@@ -76,7 +76,7 @@ class DocStatsCsv(DocStats):
             anomaly_stats = self._extract_anomaly_stats(text)
             
             # === LABEL (good/bad) basato su euristiche ===
-            label = doc.metadata["label"]
+            label = doc.metadata["label"].lower()
             
             # Combina tutte le features
             all_stats = {

@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """
-Script per valutare il classificatore di qualità su un dataset di test.
+Script per valutare il classificatore di qualità su un dataset di test scritto in un CSV.
+Sono necessarie le label, quindi bisogna generare il CSV su un dataset con label presenti.
 
 comando:
-    python scripts/evaluate_model.py \\
-        --model models/lgbm_quality_model.joblib \\
-        --test-csv data/test/dataset_test.csv \\
-        --output-dir output/evaluation \\
-        --threshold 0.65
+    python scripts/evaluate_model.py --model models/lgbm_quality_model.joblib --test-csv notebooks/doc_stats_per_file.csv --output-dir evaluation --threshold 0.7
 
 Questo script:
 1. Carica il modello addestrato
