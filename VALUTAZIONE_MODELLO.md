@@ -11,7 +11,8 @@ python scripts/evaluate_model.py \
     --model models/lgbm_quality_model.joblib \
     --test-csv data/test/dataset_test.csv \
     --output-dir output/evaluation \
-    --threshold 0.65
+    --threshold 0.65 \
+    --compare-models
 ```
 
 **Parametri:**
@@ -20,9 +21,14 @@ python scripts/evaluate_model.py \
 - `--output-dir`: (Opzionale) Directory per salvare report JSON, CSV e HTML
 - `--threshold`: (Opzionale) Soglia di decisione (default 0.5)
 - `--label-column`: (Opzionale) Nome colonna label nel CSV (default "label")
+- `--compare-models`: (Opzionale) Esegue anche la cross validation comparando LightGBM con altri modelli
+- `--comparison-csv`: (Opzionale) CSV etichettato da usare per la cross validation; se omesso usa `--test-csv`
+- `--cv-folds`: (Opzionale) Numero di fold per il benchmark (default `5`)
+- `--cv-models`: (Opzionale) Sottoinsieme di modelli da confrontare (`lightgbm`, `random_forest`, `extra_trees`, `logistic_regression`)
 
 **Output:**
 - ✅ Report stampato a schermo con metriche, confusion matrix, feature importance
+- ✅ Tabella comparativa tra modelli con differenze rispetto al baseline LightGBM
 - 📄 `evaluation_report.json` - Dati strutturati per ulteriore analisi
 - 📊 `feature_importance.csv` - Importanza delle feature in formato CSV
 - 🌐 `evaluation_report.html` - Report interattivo con grafici ROC e Precision-Recall

@@ -9,13 +9,17 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 import joblib
 
-from sklearn.model_selection import train_test_split
+from sklearn.base import clone
+from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     classification_report, 
@@ -26,6 +30,8 @@ from sklearn.metrics import (
     f1_score,
     accuracy_score,
     balanced_accuracy_score,
+    precision_score,
+    recall_score,
 )
 from sklearn.inspection import permutation_importance
 
@@ -41,6 +47,7 @@ logger = logging.getLogger(__name__)
 # Feature che il classificatore si aspetta di trovare in doc.metadata
 # (devono coincidere con quelle prodotte da ItalianFeatureExtractor)
 DEFAULT_FEATURE_NAMES: List[str] = [
+"language_score",
 "length",
 "white_space_ratio",
 "non_alpha_digit_ratio",
@@ -136,6 +143,10 @@ class QualityClassifier(PipelineStep):
         self.model: lgb.LGBMClassifier = artifact["model"]
         self.scaler: StandardScaler = artifact["scaler"]
         self._feature_names_train: List[str] = artifact["feature_names"]
+        self.model_name: str = artifact.get(
+            "model_name",
+            self.model.__class__.__name__,
+        )
         self.feature_names = feature_names or self._feature_names_train or DEFAULT_FEATURE_NAMES
 
         logger.info("Modello caricato da %s", self.model_path)
@@ -183,6 +194,267 @@ class QualityClassifier(PipelineStep):
     # METODI STATICI PER IL TRAINING
     # =================================================================
     @staticmethod
+    def _load_labeled_dataset(
+        csv_path: str,
+        feature_names: Optional[List[str]] = None,
+        label_column: str = "label",
+    ) -> tuple[pd.DataFrame, pd.Series, List[str]]:
+        """Carica un CSV etichettato e valida feature e label."""
+        feat_names = feature_names or DEFAULT_FEATURE_NAMES
+        df = pd.read_csv(csv_path)
+
+        missing_cols = set(feat_names) - set(df.columns)
+        if missing_cols:
+            raise ValueError(f"Colonne mancanti nel CSV: {missing_cols}")
+        if label_column not in df.columns:
+            raise ValueError(
+                f"Colonna label '{label_column}' non trovata nel CSV"
+            )
+
+        X = df[feat_names].copy()
+        y = df[label_column].map(LABEL_MAP)
+
+        if y.isna().any():
+            invalid = df[label_column][y.isna()].unique().tolist()
+            raise ValueError(
+                f"Valori label non validi: {invalid}. Ammessi: 'good', 'bad'."
+            )
+
+        return X, y.astype(int), feat_names
+
+    @staticmethod
+    def _compute_binary_metrics(
+        y_true: pd.Series | np.ndarray,
+        y_pred: np.ndarray,
+        y_pred_proba: np.ndarray,
+    ) -> Dict[str, float]:
+        """Calcola un set coerente di metriche binarie."""
+        return {
+            "accuracy": float(accuracy_score(y_true, y_pred)),
+            "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
+            "precision": float(precision_score(y_true, y_pred, zero_division=0)),
+            "recall": float(recall_score(y_true, y_pred, zero_division=0)),
+            "f1_score": float(f1_score(y_true, y_pred, zero_division=0)),
+            "roc_auc": float(roc_auc_score(y_true, y_pred_proba)),
+        }
+
+    @staticmethod
+    def _summarize_fold_metrics(
+        fold_metrics: List[Dict[str, float]]
+    ) -> Dict[str, float]:
+        """Restituisce media e deviazione standard per ciascuna metrica di CV."""
+        summary: Dict[str, float] = {}
+        if not fold_metrics:
+            return summary
+
+        for metric_name in fold_metrics[0].keys():
+            values = np.array(
+                [fold[metric_name] for fold in fold_metrics],
+                dtype=float,
+            )
+            summary[f"{metric_name}_mean"] = float(values.mean())
+            summary[f"{metric_name}_std"] = float(values.std(ddof=0))
+        return summary
+
+    @staticmethod
+    def _build_candidate_models(random_state: int = 42) -> Dict[str, Dict[str, Any]]:
+        """Restituisce i modelli candidati per il benchmark."""
+        return {
+            "lightgbm": {
+                "display_name": "LightGBM",
+                "estimator": lgb.LGBMClassifier(
+                    objective="binary",
+                    n_estimators=300,
+                    learning_rate=0.05,
+                    max_depth=-1,
+                    random_state=random_state,
+                    verbose=-1,
+                ),
+            },
+            "random_forest": {
+                "display_name": "Random Forest",
+                "estimator": RandomForestClassifier(
+                    n_estimators=400,
+                    min_samples_leaf=2,
+                    random_state=random_state,
+                    n_jobs=-1,
+                ),
+            },
+            "extra_trees": {
+                "display_name": "Extra Trees",
+                "estimator": ExtraTreesClassifier(
+                    n_estimators=400,
+                    min_samples_leaf=2,
+                    random_state=random_state,
+                    n_jobs=-1,
+                ),
+            },
+            "logistic_regression": {
+                "display_name": "Logistic Regression",
+                "estimator": Pipeline(
+                    steps=[
+                        ("scaler", StandardScaler()),
+                        (
+                            "classifier",
+                            LogisticRegression(
+                                max_iter=2000,
+                                class_weight="balanced",
+                                random_state=random_state,
+                            ),
+                        ),
+                    ]
+                ),
+            },
+        }
+
+    @staticmethod
+    def cross_validate_models(
+        csv_path: str,
+        feature_names: Optional[List[str]] = None,
+        label_column: str = "label",
+        threshold: float = 0.65,
+        cv_folds: int = 5,
+        random_state: int = 42,
+        model_names: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Confronta piu modelli con cross validation stratificata sullo stesso dataset.
+        """
+        if cv_folds < 2:
+            raise ValueError("cv_folds deve essere almeno 2")
+
+        X, y, feat_names = QualityClassifier._load_labeled_dataset(
+            csv_path=csv_path,
+            feature_names=feature_names,
+            label_column=label_column,
+        )
+        candidate_models = QualityClassifier._build_candidate_models(
+            random_state=random_state
+        )
+
+        if model_names:
+            invalid_model_names = sorted(set(model_names) - set(candidate_models))
+            if invalid_model_names:
+                raise ValueError(
+                    "Modelli non supportati: "
+                    f"{invalid_model_names}. Valori ammessi: {sorted(candidate_models)}"
+                )
+            selected_model_names = model_names
+        else:
+            selected_model_names = list(candidate_models.keys())
+
+        cv = StratifiedKFold(
+            n_splits=cv_folds,
+            shuffle=True,
+            random_state=random_state,
+        )
+        comparison_rows: List[Dict[str, Any]] = []
+
+        for model_key in selected_model_names:
+            spec = candidate_models[model_key]
+            fold_metrics: List[Dict[str, float]] = []
+            oof_proba = np.zeros(len(y), dtype=float)
+            oof_pred = np.zeros(len(y), dtype=int)
+
+            for train_idx, val_idx in cv.split(X, y):
+                estimator = clone(spec["estimator"])
+                X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+                y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+
+                estimator.fit(X_train, y_train)
+                val_pred_proba = estimator.predict_proba(X_val)[:, 1]
+                val_pred = (val_pred_proba >= threshold).astype(int)
+
+                fold_metrics.append(
+                    QualityClassifier._compute_binary_metrics(
+                        y_true=y_val,
+                        y_pred=val_pred,
+                        y_pred_proba=val_pred_proba,
+                    )
+                )
+                oof_proba[val_idx] = val_pred_proba
+                oof_pred[val_idx] = val_pred
+
+            summary = QualityClassifier._summarize_fold_metrics(fold_metrics)
+            overall_metrics = QualityClassifier._compute_binary_metrics(
+                y_true=y,
+                y_pred=oof_pred,
+                y_pred_proba=oof_proba,
+            )
+            confusion = confusion_matrix(y, oof_pred)
+            report = classification_report(
+                y,
+                oof_pred,
+                target_names=["bad", "good"],
+                output_dict=True,
+                zero_division=0,
+            )
+
+            comparison_rows.append(
+                {
+                    "model_key": model_key,
+                    "model_name": spec["display_name"],
+                    "threshold": threshold,
+                    "cv_folds": cv_folds,
+                    "fold_metrics": fold_metrics,
+                    "overall_metrics": {
+                        metric: round(value, 4)
+                        for metric, value in overall_metrics.items()
+                    },
+                    "classification_report": report,
+                    "confusion_matrix": confusion.tolist(),
+                    **{
+                        metric_name: round(metric_value, 4)
+                        for metric_name, metric_value in summary.items()
+                    },
+                }
+            )
+
+        comparison_rows.sort(
+            key=lambda row: (row["roc_auc_mean"], row["f1_score_mean"]),
+            reverse=True,
+        )
+
+        baseline_key = (
+            "lightgbm"
+            if "lightgbm" in selected_model_names
+            else comparison_rows[0]["model_key"]
+        )
+        baseline_row = next(
+            row for row in comparison_rows if row["model_key"] == baseline_key
+        )
+        metric_fields = [
+            "accuracy_mean",
+            "balanced_accuracy_mean",
+            "precision_mean",
+            "recall_mean",
+            "f1_score_mean",
+            "roc_auc_mean",
+        ]
+        for row in comparison_rows:
+            row["delta_vs_baseline"] = {
+                field: round(row[field] - baseline_row[field], 4)
+                for field in metric_fields
+            }
+
+        return {
+            "dataset_path": csv_path,
+            "feature_names": feat_names,
+            "threshold": threshold,
+            "cv_folds": cv_folds,
+            "baseline_model_key": baseline_key,
+            "baseline_model_name": baseline_row["model_name"],
+            "ranking_metric": "roc_auc_mean",
+            "models": comparison_rows,
+            "winner": {
+                "model_key": comparison_rows[0]["model_key"],
+                "model_name": comparison_rows[0]["model_name"],
+                "roc_auc_mean": comparison_rows[0]["roc_auc_mean"],
+                "f1_score_mean": comparison_rows[0]["f1_score_mean"],
+            },
+        }
+
+    @staticmethod
     def train_from_csv(
         csv_path: str,
         feature_names: Optional[List[str]] = None,
@@ -208,32 +480,12 @@ class QualityClassifier(PipelineStep):
         result = QualityClassifier.train_from_csv("data/quality_dataset.csv")
         QualityClassifier.save_model(result, "models/quality_model.joblib")
         """
-        feat_names = feature_names or DEFAULT_FEATURE_NAMES
-
         # ------- 1. Caricamento dati -------
-        df = pd.read_csv(csv_path)
-
-        # Mantengo la colonna degli id 
-        doc_ids = df["doc_id"]
-        df = df.drop(columns=["doc_id"])
-
-        missing_cols = set(feat_names) - set(df.columns)
-        if missing_cols:
-            raise ValueError(f"Colonne mancanti nel CSV: {missing_cols}")
-        if label_column not in df.columns:
-            raise ValueError(
-                f"Colonna label '{label_column}' non trovata nel CSV"
-            )
-
-        X = df[feat_names]
-        y = df[label_column].map(LABEL_MAP)
-
-        # isna() rileva la mancanza di valori (ovvero valori NaN, a seguito del mapping sopra efettuato) e mappa seocodno True e False
-        if y.isna().any():
-            invalid = df[label_column][y.isna()].unique().tolist()
-            raise ValueError(
-                f"Valori label non validi: {invalid}. Ammessi: 'good', 'bad'."
-            )
+        X, y, feat_names = QualityClassifier._load_labeled_dataset(
+            csv_path=csv_path,
+            feature_names=feature_names,
+            label_column=label_column,
+        )
         
         # ------- 1b. Correlation Matrix -------
         # Calcola la matrice di correlazione tra tutte le feature + label
@@ -270,21 +522,27 @@ class QualityClassifier(PipelineStep):
         else:
             print(f"\nNessuna coppia di feature con |correlazione| > {high_corr_threshold}")
 
-        # ------- 2. Scaling -------
-        # Normalizzazione delle features
-        scaler = StandardScaler()
-        X_scaled = pd.DataFrame(
-            # fit_transform() calcola media e deviazione standard sul dataset e trasforma i dati
-            scaler.fit_transform(X), columns=feat_names
-        )
-
-        # ------- 3. Train / Validation split -------
+        # ------- 2. Train / Validation split -------
         X_train, X_val, y_train, y_val = train_test_split(
-            X_scaled,
+            X,
             y,
             test_size=test_size,    # default 0.2 -> 20% validazione
             stratify=y,     # mantiene la porzione good/bad
             random_state=random_state,
+        )
+
+        # ------- 3. Scaling -------
+        # Fitto lo scaler solo sul training set per evitare data leakage.
+        scaler = StandardScaler()
+        X_train_scaled = pd.DataFrame(
+            scaler.fit_transform(X_train),
+            columns=feat_names,
+            index=X_train.index,
+        )
+        X_val_scaled = pd.DataFrame(
+            scaler.transform(X_val),
+            columns=feat_names,
+            index=X_val.index,
         )
 
         # ------- 4. Training -------
@@ -297,10 +555,10 @@ class QualityClassifier(PipelineStep):
             verbose=-1,
         )
         # Chiamata che effettua l'apprendimento
-        model.fit(X_train, y_train)
+        model.fit(X_train_scaled, y_train)
 
         # ------- 5. Valutazione -------
-        y_pred = model.predict(X_val)
+        y_pred = model.predict(X_val_scaled)
 
         # Genera un dizionario 
         report = classification_report(
@@ -323,7 +581,7 @@ class QualityClassifier(PipelineStep):
         print("\nCalcolo permutation feature importance...")
         perm = permutation_importance(
             model,
-            X_val,
+            X_val_scaled,
             y_val,
             n_repeats=10,
             random_state=random_state,
@@ -344,6 +602,7 @@ class QualityClassifier(PipelineStep):
         return {
             "model": model,
             "scaler": scaler,
+            "model_name": "LightGBM",
             "feature_names": feat_names,
             "classification_report": report,
             "confusion_matrix": cm,
@@ -371,6 +630,10 @@ class QualityClassifier(PipelineStep):
             "model": training_result["model"],
             "scaler": training_result["scaler"],
             "feature_names": training_result["feature_names"],
+            "model_name": training_result.get(
+                "model_name",
+                training_result["model"].__class__.__name__,
+            ),
         }
         joblib.dump(artifact, output_path)
 
@@ -383,6 +646,7 @@ class QualityClassifier(PipelineStep):
             csv_path: str,
             label_column: str = "label",
             output_dir: Optional[str] = None,
+            comparison_result: Optional[Dict[str, Any]] = None,
     ) -> dict:
         """
         Valuta il modello su un dataset di test contenuto in un CSV.
@@ -404,6 +668,8 @@ class QualityClassifier(PipelineStep):
         output_dir : str | None
             Directory dove salvare il report in formato JSON e HTML.
             Se None, il report viene solo stampato a schermo.
+        comparison_result : dict | None
+            Risultato opzionale del benchmark multi-modello da includere nel report.
 
         -------
         Ritorna un dizionario contenente:
@@ -416,45 +682,36 @@ class QualityClassifier(PipelineStep):
             - "feature_names": Nomi delle feature impiegate
             - "timestamp": Data/ora della valutazione
         """
-        # Carico il dataset
-        df = pd.read_csv(csv_path)
-        
-        # Verifico colonne
-        missing_cols = set(self.feature_names) - set(df.columns)
-        if missing_cols:
-            raise ValueError(f"Colonne mancanti nel CSV: {missing_cols}")
-        if label_column not in df.columns:
-            raise ValueError(f"Colonna label '{label_column}' non trovata nel CSV")
-
-        # Estraggo feature e label
-        X = df[self.feature_names]
-        y = df[label_column].map(LABEL_MAP)
-        
-        if y.isna().any():
-            invalid = df[label_column][y.isna()].unique().tolist()
-            raise ValueError(
-                f"Valori label non validi: {invalid}. Ammessi: 'good', 'bad'."
-            )
+        X, y, _ = self._load_labeled_dataset(
+            csv_path=csv_path,
+            feature_names=self.feature_names,
+            label_column=label_column,
+        )
 
         # Scalo le feature usando lo scaler del modello
         X_scaled = self.scaler.transform(X)
         X_scaled = pd.DataFrame(X_scaled, columns=self.feature_names)
 
         # Predizioni
-        y_pred = self.model.predict(X_scaled)
         y_pred_proba = self.model.predict_proba(X_scaled)[:, 1]  # Probabilità della classe "good"
+        y_pred = (y_pred_proba >= self.threshold).astype(int)
 
         # Calcolo metriche
-        accuracy = accuracy_score(y, y_pred)
-        balanced_acc = balanced_accuracy_score(y, y_pred)
-        roc_auc = roc_auc_score(y, y_pred_proba)
-        f1 = f1_score(y, y_pred)
+        metrics = self._compute_binary_metrics(
+            y_true=y,
+            y_pred=y_pred,
+            y_pred_proba=y_pred_proba,
+        )
+        accuracy = metrics["accuracy"]
+        balanced_acc = metrics["balanced_accuracy"]
+        roc_auc = metrics["roc_auc"]
+        f1 = metrics["f1_score"]
         cm = confusion_matrix(y, y_pred)
         report_dict = classification_report(
-            y, y_pred, target_names=["bad", "good"], output_dict=True
+            y, y_pred, target_names=["bad", "good"], output_dict=True, zero_division=0
         )
         report_str = classification_report(
-            y, y_pred, target_names=["bad", "good"]
+            y, y_pred, target_names=["bad", "good"], zero_division=0
         )
 
         # Feature importance (permutation)
@@ -504,7 +761,10 @@ class QualityClassifier(PipelineStep):
             "top_features": importance_df.head(10).to_dict(orient="records"),
             "csv_path": csv_path,
             "timestamp": datetime.now().isoformat(),
+            "model_name": self.model_name,
         }
+        if comparison_result is not None:
+            result["model_comparison"] = comparison_result
 
         # Salvo i report se specificato output_dir
         if output_dir:
@@ -631,6 +891,7 @@ class QualityClassifier(PipelineStep):
         roc_points = json.dumps([{"x": float(f), "y": float(t)} for f, t in zip(fpr, tpr)])
         pr_points = json.dumps([{"x": float(r), "y": float(p)} for r, p in zip(recall_vals, precision_vals)])
         importance_total = float(importance_df["importance_mean"].sum()) or 1.0
+        comparison_result = evaluation_result.get("model_comparison")
 
         html = f"""
 <!DOCTYPE html>
@@ -922,6 +1183,41 @@ class QualityClassifier(PipelineStep):
         <div class="chart-container">
             <canvas id="prChart"></canvas>
         </div>
+"""
+        if comparison_result:
+            html += """
+        <h2>Confronto modelli con cross validation</h2>
+        <p class="intro">Benchmark stratificato con la stessa soglia decisionale applicata a ciascun modello. Le differenze sono espresse rispetto al modello baseline.</p>
+        <table class="features-table">
+            <thead>
+                <tr>
+                    <th>Modello</th>
+                    <th>ROC-AUC CV</th>
+                    <th>F1 CV</th>
+                    <th>Balanced Acc CV</th>
+                    <th>Delta ROC-AUC</th>
+                    <th>Delta F1</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+            for row in comparison_result["models"]:
+                html += f"""
+                <tr>
+                    <td><strong>{row['model_name']}</strong></td>
+                    <td>{row['roc_auc_mean']:.4f} ± {row['roc_auc_std']:.4f}</td>
+                    <td>{row['f1_score_mean']:.4f} ± {row['f1_score_std']:.4f}</td>
+                    <td>{row['balanced_accuracy_mean']:.4f} ± {row['balanced_accuracy_std']:.4f}</td>
+                    <td>{row['delta_vs_baseline']['roc_auc_mean']:+.4f}</td>
+                    <td>{row['delta_vs_baseline']['f1_score_mean']:+.4f}</td>
+                </tr>
+"""
+            html += """
+            </tbody>
+        </table>
+"""
+
+        html += """
     </div>
 
     <script>

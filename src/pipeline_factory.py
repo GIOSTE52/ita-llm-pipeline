@@ -16,7 +16,7 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, model_pa
         get_jsonl_reader(data_dir,  pattern = "train/*.jsonl"),
         
         # 2. Filtro Lingua (Ora richiamato dal tuo modulo filters)
-        get_language_filter(rejected_dir, threshold=0.75),
+        get_language_filter(rejected_dir, threshold=0.75, languages = "it"),
 
         # 3. Filtro Custom per Rumore Web
         # CustomItalianFilter(
@@ -46,7 +46,8 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, model_pa
         DocStatsCsv(
             output_folder=os.path.join(output_dir, "feature"),
             csv_filename="doc_stats_per_file.csv",
-            groups_to_compute=["summary"]
+            groups_to_compute=["summary"],
+            languages="it",
         ),
 
         # 7. Classificazione italiana con QualityClassifier

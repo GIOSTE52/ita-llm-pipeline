@@ -3,13 +3,14 @@ import csv
 import string
 import math
 from collections import Counter
-from typing import get_args
+from typing import get_args, List
 from datatrove.data import Document
 from datatrove.io import DataFolderLike, get_datafolder
 from datatrove.pipeline.stats.doc_stats import DocStats
 from datatrove.pipeline.stats.config import DEFAULT_TOP_K_CONFIG, GROUP, TopKConfig
 from datatrove.utils.text import PUNCTUATION
 from loguru import logger
+from datatrove.utils.lid import FT176LID
 
 
 ELIPSIS = ["...", "…"]
@@ -41,6 +42,8 @@ class DocStatsCsv(DocStats):
 
     name = "🇮🇹 Italian Advanced Features CSV"
 
+    languages = None
+
     def __init__(
         self,
         output_folder: DataFolderLike,
@@ -48,12 +51,14 @@ class DocStatsCsv(DocStats):
         groups_to_compute: list[GROUP] = list(get_args(GROUP)),
         histogram_round_digits: int = 3,
         top_k_config: TopKConfig = DEFAULT_TOP_K_CONFIG,
+        languages : List[str] | str | None = None, 
     ) -> None:
         super().__init__(output_folder, groups_to_compute, histogram_round_digits, top_k_config)
         self.csv_filename = csv_filename
         self.all_docs_stats = []
         self.elipsis_regex = re.compile("|".join([f"(?:{re.escape(elipsis)})" for elipsis in ELIPSIS]))
         self.punc_regex = re.compile("|".join([f"(?:{re.escape(punc)})" for punc in PUNCTUATION]))
+        self.languages = languages
 
     def extract_stats(self, doc: Document) -> dict:
         text = doc.text
@@ -410,7 +415,16 @@ class DocStatsCsv(DocStats):
                     raise e
 
                 # Punteggio lingua calcolato da LanguageFilter (se presente in metadata)
-                language_score = doc.metadata.get("language_score", 0.0)
+                if doc.metadata["language_score"] != 0:
+                    language_score = doc.metadata["language_score"]
+                else:
+                    languages = self.languages if isinstance(self.languages, list) or self.languages is None else [self.languages]
+                    model = FT176LID(languages)
+                    # Calcola lo score usando fasttext
+                    best_lang_pair, lang_pairs = model.predict(doc)
+                    lang, language_score = best_lang_pair
+                    doc.metadata["language_score"] = language_score
+                    
                 
                 row = {
                     "doc_id": doc.id,
