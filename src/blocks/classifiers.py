@@ -45,7 +45,7 @@ from datatrove.data import DocumentsPipeline
 logger = logging.getLogger(__name__)
 
 # Feature che il classificatore si aspetta di trovare in doc.metadata
-# (devono coincidere con quelle prodotte da ItalianFeatureExtractor)
+# (devono coincidere con quelle prodotte da DocStatsCsv)
 DEFAULT_FEATURE_NAMES: List[str] = [
 "language_score",
 "length",

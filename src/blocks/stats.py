@@ -17,10 +17,32 @@ ELIPSIS = ["...", "…"]
 
 # Stopwords italiano (base)
 ITALIAN_STOPWORDS = {
-    "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "e", "è", "di", "da", 
-    "che", "per", "con", "a", "in", "su", "se", "non", "come", "ma", "o", "nel",
-    "della", "dei", "delle", "degli", "al", "agli", "alla", "alle", "nel", "nella",
-    "nei", "nelle", "dal", "dallo", "dalla", "dagli", "dalle", "tra", "fra", "cui"
+    "il", "lo", "la", "i", "gli", "le", "un", "uno", "una","l'", "un'",
+    "di", "a", "da", "in", "con", "su", "per", "tra", "fra",
+    "del", "della","dello", "dei", "delle", "degli", 
+    "al", "alla", "allo","ai", "agli", "alle", "all'",
+    "dal", "dalla", "dallo", "dalla", "dai","dagli", "dall'",
+    "nel", "nei", "nelle", "nello", "nella", "negli",
+    "col", "coi", "sul", "sulla", "sui", "sulle", "sugli","sullo", "sull'",
+    "e", "o", "ma", "però", "tuttavia", "dunque", "quindi", "anche", "dove",
+    "pure", "inoltre", "infatti", "invece", "mentre", "quando", "perché",
+    "poiché", "benché", "affinché", "purché", "siccome", "ciò",
+    "io", "tu", "egli", "lui", "lei", "esso", "noi", "voi", "loro", "essi",
+    "mi", "ti", "ci", "vi", "si", "li", "ne",
+    "me", "te", "ce", "ve", "se",
+    "questo", "questa", "questi", "queste",
+    "quello", "quella", "quelli", "quelle",
+    "che", "cui", "chi", "c'è", "come",
+    "quali", "quale", "quanto", "quanta", "quanti", "quante",  
+    "alcuni","alcune", "qualche", "qualcosa", "qualcuno","qualcuna",
+    "nulla", "niente", "nessuno", "nessuna", 
+    "tutto", "tutte", "tutti", "tutta",
+    "altro", "altri", "altre", "altra",
+    "stesso", "stessa", "stessi", "stesse",
+    "non", "sì", "no", "più", "meno", "molto", "poco", "troppo", "così", "allora",
+    "già", "ancora", "sempre", "spesso", "mai", "qui", "qua", "li", "là", 
+    "essere", "sono", "sei", "è", "siamo", "siete", "era", "erano", "sia", "siano",
+    "avere", "ha", "hanno", "hai", "ho", "avete", "abbiamo" , "po'", "com'", "c'", "d'"
 }
 
 
