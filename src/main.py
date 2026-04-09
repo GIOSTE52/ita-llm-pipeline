@@ -4,6 +4,8 @@ from pipeline_factory import build_italian_cleaning_pipeline
 from utils.output_organizer import output_classification
 from datatrove.utils.stats import PipelineStats
 import os
+import subprocess
+import time
 
 def main():
     """
@@ -30,48 +32,53 @@ def main():
     # 4. Avvio della pipeline
     executor.run()
 
-    # 5. Recupero delle statistiche di interesse
-    stats = PipelineStats(
-        executor.pipeline
-    )
-
-    # Descrizione di alcune statistiche fornite da DataTrove a fronte del report di progetto
-    # print("=" * 60)
-    # print("REPORT ESECUZIONE PIPELINE")
-    # print("=" * 60)
-
-    # # Per ogni step
-    # for i, step_stats in enumerate(stats.stats):
-    #     print(f"\n--- Step {i+1}: {step_stats.name} ---")
-    #     print(f"  ⏱️  Tempo globale: {step_stats.time_stats.global_mean:.2f}s")
-    #     print(f"  📊 Min: {step_stats.time_stats.global_min:.2f}s, Max: {step_stats.time_stats.global_max:.2f}s")
-    #     print(f"  📈 ±{step_stats.time_stats.global_std_dev:.2f}s (std dev)")
-        
-    #     # Metriche custom
-    #     if step_stats.stats:
-    #         print(f"  📋 Metriche:")
-    #         for metric_name, metric_stats in step_stats.stats.items():
-    #             print(f"     - {metric_name}:")
-    #             print(f"       Total: {metric_stats.total}")
-    #             print(f"       Mean: {metric_stats.mean:.2f}/{metric_stats.unit}")
-    #             print(f"       Range: {metric_stats.min} - {metric_stats.max}")
-
-
-    # tempo totale in secondi (restituisce 0)
-    # total_time = stats.total_time
-    # print(total_time)
-
-    # tempo totale in rappresentazione formattata
-    # total_time_repr = stats.get_repr("ita-llm-pipeline")
-    # total_std_dev = stats.total_std_dev
+    # --- NUOVO PUNTO 5: AGGREGAZIONE CSV ---
+    print("\n" + "=" * 60)
+    print("📊 AGGREGAZIONE FINALE CSV: doc_stats_per_file.csv")
+    print("=" * 60)
     
-    # Ottiene una rappresentazione formattata (restituisce 0)
-    # print(stats.get_repr("ita-llm-pipeline"))
+    time.sleep(2) 
 
-    # 6. Analisi finale degli scarti (cartelle 1_..., 2_..., ecc.)
+    feature_dir = cfg["FEATURE_DIR"]
+    final_name = "doc_stats_per_file.csv" 
+    final_output_csv = os.path.join(feature_dir, final_name)
+    
+    # Cercherà rank_0_doc_stats_per_file.csv, rank_1_...
+    temp_pattern = os.path.join(feature_dir, f"rank_*_{final_name}")
+
+    merge_cmd = f"awk 'FNR==1 && NR!=1{{next;}}{{print}}' {temp_pattern} > {final_output_csv}"
+
+    try:
+        subprocess.run(merge_cmd, shell=True, check=True)
+        print(f"✅ Unione completata con successo!")
+        print(f"📂 File finale: {final_output_csv}")
+        
+        # Pulizia
+        subprocess.run(f"rm {temp_pattern}", shell=True)
+        print("🧹 File temporanei dei rank rimossi.")
+    except Exception as e:
+        print(f"⚠️ Errore durante l'aggregazione CSV: {e}")
+
+    # --- FINE AGGREGAZIONE ---
+
+    # 6. Recupero delle statistiche di interesse (PipelineStats)
+    stats = PipelineStats(executor.pipeline)
+    print("\n" + "=" * 60)
+    print("REPORT ESECUZIONE PIPELINE")
+    print("=" * 60)
+
+    for i, step_stats in enumerate(stats.stats):
+        print(f"\n--- Step {i+1}: {step_stats.name} ---")
+        print(f"  ⏱️  Tempo globale: {step_stats.time_stats.global_mean:.2f}s")
+        if step_stats.stats:
+            print(f"  📋 Metriche:")
+            for metric_name, metric_stats in step_stats.stats.items():
+                print(f"     - {metric_name}: {metric_stats.total}")
+
+    # 7. Analisi finale degli scarti
     print("\n--- 🔍 Analisi Risultati ---")
     output_classification(cfg["REJECTED_DIR"], cfg["OUTPUT_DIR"])
-    print(f"\n✅ Operazione completata. Inspection in: {os.path.join(cfg['OUTPUT_DIR'], "inspection")}")
+    print(f"\n✅ Operazione completata. Inspection in: {os.path.join(cfg['OUTPUT_DIR'], 'inspection')}")
 
 if __name__ == "__main__":
-    main() 
+    main()

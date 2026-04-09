@@ -55,7 +55,7 @@ class DocStatsCsv(DocStats):
     def __init__(
         self,
         output_folder: DataFolderLike,
-        csv_filename: str = "dataset_features_italiano.csv",
+        csv_filename: str = "doc_stats_per_file.csv",
         languages: str = "it",
         **kwargs  # <--- IMPORTANTE: accetta i parametri extra come groups_to_compute
     ) -> None:
@@ -163,41 +163,86 @@ class DocStatsCsv(DocStats):
         }
 
         return {**base, **linguistic, **structural, **anomaly}
-
+    
     def run(self, data, rank=0, world_size=1):
-        self.all_docs_stats = []
-        for doc in data:
-            with self.track_time():
-                doc_features = self.extract_stats(doc)
-                lang_score = doc.metadata.get("language_score")
-                if lang_score is None:
-                    _, lang_score = self.lid_model.predict(doc)
-                
-                row = {
-                    "doc_id": doc.id,
-                    "label": doc.metadata.get("label", "unknown").lower(),
-                    "language_score": lang_score,
-                    **doc_features
-                }
-                self.all_docs_stats.append(row)
-                doc.metadata.update(doc_features)
-                doc.metadata["language_score"] = lang_score
-            yield doc
+        # 1. Creiamo un file unico per ogni worker (fondamentale per evitare blocchi)
+        temp_csv_name = f"rank_{rank}_{self.csv_filename}"
         
-        if rank == 0:
-            self._save_to_csv()
+        # 2. Apriamo il file in modalità scrittura immediata
+        # Usiamo self.output_folder.open per essere compatibili con DataTrove
+        with self.output_folder.open(temp_csv_name, "wt") as f:
+            writer = None
+            
+            for doc in data:
+                with self.track_time():
+                    # Estraiamo le 41 features
+                    doc_features = self.extract_stats(doc)
+                    
+                    lang_score = doc.metadata.get("language_score")
+                    if lang_score is None:
+                        _, lang_score = self.lid_model.predict(doc)
+                    
+                    row = {
+                        "doc_id": doc.id,
+                        "label": doc.metadata.get("label", "unknown").lower(),
+                        "language_score": lang_score,
+                        **doc_features
+                    }
+                    
+                    # Inizializziamo l'header solo al primo documento
+                    if writer is None:
+                        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+                        writer.writeheader()
+                    
+                    # SCRITTURA IMMEDIATA: Questo svuota la RAM ad ogni riga
+                    writer.writerow(row)
+                    
+                    # Aggiorniamo i metadati per i blocchi successivi (classificatore)
+                    doc.metadata.update(doc_features)
+                    doc.metadata["language_score"] = lang_score
+                
+                yield doc
+        
+        logger.info(f"✅ Worker {rank} ha finito di scrivere il suo file parziale.")
 
+    # IMPORTANTE: Svuota questo metodo per evitare che DataTrove provi a salvare di nuovo
     def _save_to_csv(self):
-        if not self.all_docs_stats: return
-        fieldnames = list(self.all_docs_stats[0].keys())
-        try:
-            with self.output_folder.open(self.csv_filename, "wt") as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(self.all_docs_stats)
-            logger.info(f"✅ CSV salvato correttamente.")
-        except Exception as e:
-            logger.error(f"❌ Errore salvataggio: {e}")
+        pass
+
+    # def run(self, data, rank=0, world_size=1):
+    #     self.all_docs_stats = []
+    #     for doc in data:
+    #         with self.track_time():
+    #             doc_features = self.extract_stats(doc)
+    #             lang_score = doc.metadata.get("language_score")
+    #             if lang_score is None:
+    #                 _, lang_score = self.lid_model.predict(doc)
+                
+    #             row = {
+    #                 "doc_id": doc.id,
+    #                 "label": doc.metadata.get("label", "unknown").lower(),
+    #                 "language_score": lang_score,
+    #                 **doc_features
+    #             }
+    #             self.all_docs_stats.append(row)
+    #             doc.metadata.update(doc_features)
+    #             doc.metadata["language_score"] = lang_score
+    #         yield doc
+        
+    #     if rank == 0:
+    #         self._save_to_csv()
+
+    # def _save_to_csv(self):
+    #     if not self.all_docs_stats: return
+    #     fieldnames = list(self.all_docs_stats[0].keys())
+    #     try:
+    #         with self.output_folder.open(self.csv_filename, "wt") as f:
+    #             writer = csv.DictWriter(f, fieldnames=fieldnames)
+    #             writer.writeheader()
+    #             writer.writerows(self.all_docs_stats)
+    #         logger.info(f"✅ CSV salvato correttamente.")
+    #     except Exception as e:
+    #         logger.error(f"❌ Errore salvataggio: {e}")
 
     def _get_empty_stats(self) -> dict:
         # Metodo di fallback per doc vuoti (ritorna 0 per tutte le chiavi)
