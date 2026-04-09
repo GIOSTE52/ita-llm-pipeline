@@ -23,8 +23,8 @@ def main():
     # 3. Esecuzione
     executor = LocalPipelineExecutor(
         pipeline=pipeline_blocks,
-        tasks=1,
-        workers=1
+        tasks=1, #numero giusto per numero di file in test_chunks
+        workers=cfg["MAX_WORKERS"]
     )
     # 4. Avvio della pipeline
     print(f"\nPipeline avviata su: {cfg['DATA_DIR']}")
