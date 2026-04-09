@@ -23,11 +23,11 @@ def main():
     # 3. Esecuzione
     executor = LocalPipelineExecutor(
         pipeline=pipeline_blocks,
-        tasks=1, #numero giusto per numero di file in test_chunks
+        tasks=cfg["NUM_TASKS"],
         workers=cfg["MAX_WORKERS"]
     )
     # 4. Avvio della pipeline
-    print(f"\nPipeline avviata su: {cfg['DATA_DIR']}")
+    print(f"\n🚀 Avvio elaborazione: {cfg['NUM_TASKS']} task su {cfg['MAX_WORKERS']} worker.")
     executor.run()
 
     # 5. Recupero delle statistiche di interesse

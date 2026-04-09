@@ -13,7 +13,7 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, model_pa
     """
     return [
         # 1. Lettura
-        get_jsonl_reader(data_dir,  pattern = "train/*.jsonl"),
+        get_jsonl_reader(data_dir,  pattern = "test/*.jsonl"),
         
         # 2. Filtro Lingua (Ora richiamato dal tuo modulo filters)
         get_language_filter(rejected_dir, threshold=0.75, languages = "it"),
