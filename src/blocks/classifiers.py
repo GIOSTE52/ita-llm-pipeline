@@ -9,13 +9,17 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 import joblib
 
-from sklearn.model_selection import train_test_split
+from sklearn.base import clone
+from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     classification_report, 
@@ -26,6 +30,8 @@ from sklearn.metrics import (
     f1_score,
     accuracy_score,
     balanced_accuracy_score,
+    precision_score,
+    recall_score,
 )
 from sklearn.inspection import permutation_importance
 
@@ -39,8 +45,9 @@ from datatrove.data import DocumentsPipeline
 logger = logging.getLogger(__name__)
 
 # Feature che il classificatore si aspetta di trovare in doc.metadata
-# (devono coincidere con quelle prodotte da ItalianFeatureExtractor)
+# (devono coincidere con quelle prodotte da DocStatsCsv)
 DEFAULT_FEATURE_NAMES: List[str] = [
+"language_score",
 "length",
 "white_space_ratio",
 "non_alpha_digit_ratio",
@@ -136,6 +143,14 @@ class QualityClassifier(PipelineStep):
         self.model: lgb.LGBMClassifier = artifact["model"]
         self.scaler: StandardScaler = artifact["scaler"]
         self._feature_names_train: List[str] = artifact["feature_names"]
+        self.model_name: str = artifact.get(
+            "model_name",
+            self.model.__class__.__name__,
+        )
+        self.training_metadata: Dict[str, Any] = artifact.get(
+            "training_metadata",
+            {},
+        )
         self.feature_names = feature_names or self._feature_names_train or DEFAULT_FEATURE_NAMES
 
         logger.info("Modello caricato da %s", self.model_path)
@@ -183,39 +198,14 @@ class QualityClassifier(PipelineStep):
     # METODI STATICI PER IL TRAINING
     # =================================================================
     @staticmethod
-    def train_from_csv(
+    def _load_labeled_dataset(
         csv_path: str,
         feature_names: Optional[List[str]] = None,
         label_column: str = "label",
-        test_size: float = 0.2,
-        n_estimators: int = 300,
-        learning_rate: float = 0.05,
-        random_state: int = 42,
-    ) -> dict:
-        """
-        Addestra un modello LightGBM binario a partire da un CSV.
-
-        Il CSV deve contenere:
-        - le colonne corrispondenti alle feature (stessi nomi di DEFAULT_FEATURE_NAMES
-          oppure quelli specificati in ``feature_names``)
-        - una colonna ``label`` con valori "good" / "bad"
-
-        Restituisce un dizionario con modello, scaler, metriche e
-        importanza delle feature.
-
-        Esempio
-        -------
-        result = QualityClassifier.train_from_csv("data/quality_dataset.csv")
-        QualityClassifier.save_model(result, "models/quality_model.joblib")
-        """
+    ) -> tuple[pd.DataFrame, pd.Series, List[str]]:
+        """Carica un CSV etichettato e valida feature e label."""
         feat_names = feature_names or DEFAULT_FEATURE_NAMES
-
-        # ------- 1. Caricamento dati -------
         df = pd.read_csv(csv_path)
-
-        # Mantengo la colonna degli id 
-        doc_ids = df["doc_id"]
-        df = df.drop(columns=["doc_id"])
 
         missing_cols = set(feat_names) - set(df.columns)
         if missing_cols:
@@ -225,15 +215,284 @@ class QualityClassifier(PipelineStep):
                 f"Colonna label '{label_column}' non trovata nel CSV"
             )
 
-        X = df[feat_names]
+        X = df[feat_names].copy()
         y = df[label_column].map(LABEL_MAP)
 
-        # isna() rileva la mancanza di valori (ovvero valori NaN, a seguito del mapping sopra efettuato) e mappa seocodno True e False
         if y.isna().any():
             invalid = df[label_column][y.isna()].unique().tolist()
             raise ValueError(
                 f"Valori label non validi: {invalid}. Ammessi: 'good', 'bad'."
             )
+
+        return X, y.astype(int), feat_names
+
+    @staticmethod
+    def _compute_binary_metrics(
+        y_true: pd.Series | np.ndarray,
+        y_pred: np.ndarray,
+        y_pred_proba: np.ndarray,
+    ) -> Dict[str, float]:
+        """Calcola un set coerente di metriche binarie."""
+        return {
+            "accuracy": float(accuracy_score(y_true, y_pred)),
+            "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
+            "precision": float(precision_score(y_true, y_pred, zero_division=0)),
+            "recall": float(recall_score(y_true, y_pred, zero_division=0)),
+            "f1_score": float(f1_score(y_true, y_pred, zero_division=0)),
+            "roc_auc": float(roc_auc_score(y_true, y_pred_proba)),
+        }
+
+    @staticmethod
+    def _summarize_fold_metrics(
+        fold_metrics: List[Dict[str, float]]
+    ) -> Dict[str, float]:
+        """Restituisce media e deviazione standard per ciascuna metrica di CV."""
+        summary: Dict[str, float] = {}
+        if not fold_metrics:
+            return summary
+
+        for metric_name in fold_metrics[0].keys():
+            values = np.array(
+                [fold[metric_name] for fold in fold_metrics],
+                dtype=float,
+            )
+            summary[f"{metric_name}_mean"] = float(values.mean())
+            summary[f"{metric_name}_std"] = float(values.std(ddof=0))
+        return summary
+
+    @staticmethod
+    def _build_candidate_models(random_state: int = 42) -> Dict[str, Dict[str, Any]]:
+        """Restituisce i modelli candidati per il benchmark."""
+        return {
+            "lightgbm": {
+                "display_name": "LightGBM",
+                "estimator": lgb.LGBMClassifier(
+                    objective="binary",
+                    n_estimators=300,
+                    learning_rate=0.05,
+                    max_depth=-1,
+                    random_state=random_state,
+                    verbose=-1,
+                ),
+            },
+            "random_forest": {
+                "display_name": "Random Forest",
+                "estimator": RandomForestClassifier(
+                    n_estimators=400,
+                    min_samples_leaf=2,
+                    random_state=random_state,
+                    n_jobs=-1,
+                ),
+            },
+            "extra_trees": {
+                "display_name": "Extra Trees",
+                "estimator": ExtraTreesClassifier(
+                    n_estimators=400,
+                    min_samples_leaf=2,
+                    random_state=random_state,
+                    n_jobs=-1,
+                ),
+            },
+            "logistic_regression": {
+                "display_name": "Logistic Regression",
+                "estimator": Pipeline(
+                    steps=[
+                        ("scaler", StandardScaler()),
+                        (
+                            "classifier",
+                            LogisticRegression(
+                                max_iter=2000,
+                                class_weight="balanced",
+                                random_state=random_state,
+                            ),
+                        ),
+                    ]
+                ),
+            },
+        }
+
+    @staticmethod
+    def cross_validate_models(
+        csv_path: str,
+        feature_names: Optional[List[str]] = None,
+        label_column: str = "label",
+        threshold: float = 0.65,
+        cv_folds: int = 5,
+        random_state: int = 42,
+        model_names: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Confronta piu modelli con cross validation stratificata sullo stesso dataset.
+        """
+        if cv_folds < 2:
+            raise ValueError("cv_folds deve essere almeno 2")
+
+        X, y, feat_names = QualityClassifier._load_labeled_dataset(
+            csv_path=csv_path,
+            feature_names=feature_names,
+            label_column=label_column,
+        )
+        candidate_models = QualityClassifier._build_candidate_models(
+            random_state=random_state
+        )
+
+        if model_names:
+            invalid_model_names = sorted(set(model_names) - set(candidate_models))
+            if invalid_model_names:
+                raise ValueError(
+                    "Modelli non supportati: "
+                    f"{invalid_model_names}. Valori ammessi: {sorted(candidate_models)}"
+                )
+            selected_model_names = model_names
+        else:
+            selected_model_names = list(candidate_models.keys())
+
+        cv = StratifiedKFold(
+            n_splits=cv_folds,
+            shuffle=True,
+            random_state=random_state,
+        )
+        comparison_rows: List[Dict[str, Any]] = []
+
+        for model_key in selected_model_names:
+            spec = candidate_models[model_key]
+            fold_metrics: List[Dict[str, float]] = []
+            oof_proba = np.zeros(len(y), dtype=float)
+            oof_pred = np.zeros(len(y), dtype=int)
+
+            for train_idx, val_idx in cv.split(X, y):
+                estimator = clone(spec["estimator"])
+                X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+                y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+
+                estimator.fit(X_train, y_train)
+                val_pred_proba = estimator.predict_proba(X_val)[:, 1]
+                val_pred = (val_pred_proba >= threshold).astype(int)
+
+                fold_metrics.append(
+                    QualityClassifier._compute_binary_metrics(
+                        y_true=y_val,
+                        y_pred=val_pred,
+                        y_pred_proba=val_pred_proba,
+                    )
+                )
+                oof_proba[val_idx] = val_pred_proba
+                oof_pred[val_idx] = val_pred
+
+            summary = QualityClassifier._summarize_fold_metrics(fold_metrics)
+            overall_metrics = QualityClassifier._compute_binary_metrics(
+                y_true=y,
+                y_pred=oof_pred,
+                y_pred_proba=oof_proba,
+            )
+            confusion = confusion_matrix(y, oof_pred)
+            report = classification_report(
+                y,
+                oof_pred,
+                target_names=["bad", "good"],
+                output_dict=True,
+                zero_division=0,
+            )
+
+            comparison_rows.append(
+                {
+                    "model_key": model_key,
+                    "model_name": spec["display_name"],
+                    "threshold": threshold,
+                    "cv_folds": cv_folds,
+                    "fold_metrics": fold_metrics,
+                    "overall_metrics": {
+                        metric: round(value, 4)
+                        for metric, value in overall_metrics.items()
+                    },
+                    "classification_report": report,
+                    "confusion_matrix": confusion.tolist(),
+                    **{
+                        metric_name: round(metric_value, 4)
+                        for metric_name, metric_value in summary.items()
+                    },
+                }
+            )
+
+        comparison_rows.sort(
+            key=lambda row: (row["roc_auc_mean"], row["f1_score_mean"]),
+            reverse=True,
+        )
+
+        baseline_key = (
+            "lightgbm"
+            if "lightgbm" in selected_model_names
+            else comparison_rows[0]["model_key"]
+        )
+        baseline_row = next(
+            row for row in comparison_rows if row["model_key"] == baseline_key
+        )
+        metric_fields = [
+            "accuracy_mean",
+            "balanced_accuracy_mean",
+            "precision_mean",
+            "recall_mean",
+            "f1_score_mean",
+            "roc_auc_mean",
+        ]
+        for row in comparison_rows:
+            row["delta_vs_baseline"] = {
+                field: round(row[field] - baseline_row[field], 4)
+                for field in metric_fields
+            }
+
+        return {
+            "dataset_path": csv_path,
+            "feature_names": feat_names,
+            "threshold": threshold,
+            "cv_folds": cv_folds,
+            "baseline_model_key": baseline_key,
+            "baseline_model_name": baseline_row["model_name"],
+            "ranking_metric": "roc_auc_mean",
+            "models": comparison_rows,
+            "winner": {
+                "model_key": comparison_rows[0]["model_key"],
+                "model_name": comparison_rows[0]["model_name"],
+                "roc_auc_mean": comparison_rows[0]["roc_auc_mean"],
+                "f1_score_mean": comparison_rows[0]["f1_score_mean"],
+            },
+        }
+
+    @staticmethod
+    def train_from_csv(
+        csv_path: str,
+        feature_names: Optional[List[str]] = None,
+        label_column: str = "label",
+        validation_csv_path: Optional[str] = None,
+        test_size: float = 0.2,
+        n_estimators: int = 300,
+        learning_rate: float = 0.05,
+        threshold: float = 0.65,
+        random_state: int = 42,
+    ) -> dict:
+        """
+        Addestra un modello LightGBM binario a partire da un CSV.
+
+        Il CSV deve contenere:
+        - le colonne corrispondenti alle feature (stessi nomi di DEFAULT_FEATURE_NAMES
+          oppure quelli specificati in ``feature_names``)
+        - una colonna ``label`` con valori "good" / "bad"
+        - opzionalmente un CSV di validazione separato, per evitare split interni
+
+        Restituisce un dizionario con modello, scaler, metriche e
+        importanza delle feature.
+
+        Esempio
+        -------
+        result = QualityClassifier.train_from_csv("data/quality_dataset.csv")
+        QualityClassifier.save_model(result, "models/quality_model.joblib")
+        """
+        # ------- 1. Caricamento dati -------
+        X, y, feat_names = QualityClassifier._load_labeled_dataset(
+            csv_path=csv_path,
+            feature_names=feature_names,
+            label_column=label_column,
+        )
         
         # ------- 1b. Correlation Matrix -------
         # Calcola la matrice di correlazione tra tutte le feature + label
@@ -270,21 +529,53 @@ class QualityClassifier(PipelineStep):
         else:
             print(f"\nNessuna coppia di feature con |correlazione| > {high_corr_threshold}")
 
-        # ------- 2. Scaling -------
-        # Normalizzazione delle features
-        scaler = StandardScaler()
-        X_scaled = pd.DataFrame(
-            # fit_transform() calcola media e deviazione standard sul dataset e trasforma i dati
-            scaler.fit_transform(X), columns=feat_names
-        )
+        # ------- 2. Train / Validation split -------
+        if validation_csv_path:
+            X_train = X
+            y_train = y
+            X_val, y_val, _ = QualityClassifier._load_labeled_dataset(
+                csv_path=validation_csv_path,
+                feature_names=feat_names,
+                label_column=label_column,
+            )
+            split_metadata = {
+                "split_strategy": "precomputed_validation_csv",
+                "train_csv": os.path.abspath(csv_path),
+                "validation_csv": os.path.abspath(validation_csv_path),
+                "train_rows": int(len(X_train)),
+                "validation_rows": int(len(X_val)),
+                "random_state": random_state,
+            }
+        else:
+            X_train, X_val, y_train, y_val = train_test_split(
+                X,
+                y,
+                test_size=test_size,    # default 0.2 -> 20% validazione
+                stratify=y,     # mantiene la porzione good/bad
+                random_state=random_state,
+            )
+            split_metadata = {
+                "split_strategy": "internal_train_test_split",
+                "train_csv": os.path.abspath(csv_path),
+                "validation_csv": None,
+                "train_rows": int(len(X_train)),
+                "validation_rows": int(len(X_val)),
+                "validation_fraction": float(test_size),
+                "random_state": random_state,
+            }
 
-        # ------- 3. Train / Validation split -------
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_scaled,
-            y,
-            test_size=test_size,    # default 0.2 -> 20% validazione
-            stratify=y,     # mantiene la porzione good/bad
-            random_state=random_state,
+        # ------- 3. Scaling -------
+        # Fitto lo scaler solo sul training set per evitare data leakage.
+        scaler = StandardScaler()
+        X_train_scaled = pd.DataFrame(
+            scaler.fit_transform(X_train),
+            columns=feat_names,
+            index=X_train.index,
+        )
+        X_val_scaled = pd.DataFrame(
+            scaler.transform(X_val),
+            columns=feat_names,
+            index=X_val.index,
         )
 
         # ------- 4. Training -------
@@ -297,24 +588,32 @@ class QualityClassifier(PipelineStep):
             verbose=-1,
         )
         # Chiamata che effettua l'apprendimento
-        model.fit(X_train, y_train)
+        model.fit(X_train_scaled, y_train)
 
         # ------- 5. Valutazione -------
-        y_pred = model.predict(X_val)
+        y_pred_proba = model.predict_proba(X_val_scaled)[:, 1]
+        y_pred = (y_pred_proba >= threshold).astype(int)
+        metrics = QualityClassifier._compute_binary_metrics(
+            y_true=y_val,
+            y_pred=y_pred,
+            y_pred_proba=y_pred_proba,
+        )
 
         # Genera un dizionario 
         report = classification_report(
-            y_val, y_pred, target_names=["bad", "good"], output_dict=True
+            y_val, y_pred, target_names=["bad", "good"], output_dict=True,
+            zero_division=0,
         )
         # Genera una string stampabile a schermo
         report_str = classification_report(
-            y_val, y_pred, target_names=["bad", "good"]
+            y_val, y_pred, target_names=["bad", "good"], zero_division=0
         )
         cm = confusion_matrix(y_val, y_pred)
 
         print("=" * 60)
         print("CLASSIFICATION REPORT")
         print("=" * 60)
+        print(f"Soglia decisione validazione: {threshold:.2f}")
         print(report_str)
         print("\nConfusion Matrix:")
         print(cm)
@@ -323,7 +622,7 @@ class QualityClassifier(PipelineStep):
         print("\nCalcolo permutation feature importance...")
         perm = permutation_importance(
             model,
-            X_val,
+            X_val_scaled,
             y_val,
             n_repeats=10,
             random_state=random_state,
@@ -344,7 +643,14 @@ class QualityClassifier(PipelineStep):
         return {
             "model": model,
             "scaler": scaler,
+            "model_name": "LightGBM",
             "feature_names": feat_names,
+            "threshold": threshold,
+            "validation_metrics": {
+                metric_name: round(metric_value, 4)
+                for metric_name, metric_value in metrics.items()
+            },
+            "split_metadata": split_metadata,
             "classification_report": report,
             "confusion_matrix": cm,
             "correlation_matrix": correlation_matrix,
@@ -371,6 +677,16 @@ class QualityClassifier(PipelineStep):
             "model": training_result["model"],
             "scaler": training_result["scaler"],
             "feature_names": training_result["feature_names"],
+            "model_name": training_result.get(
+                "model_name",
+                training_result["model"].__class__.__name__,
+            ),
+            "threshold": training_result.get("threshold"),
+            "validation_metrics": training_result.get("validation_metrics"),
+            "training_metadata": training_result.get(
+                "training_metadata",
+                training_result.get("split_metadata", {}),
+            ),
         }
         joblib.dump(artifact, output_path)
 
@@ -383,9 +699,12 @@ class QualityClassifier(PipelineStep):
             csv_path: str,
             label_column: str = "label",
             output_dir: Optional[str] = None,
+            comparison_result: Optional[Dict[str, Any]] = None,
     ) -> dict:
         """
         Valuta il modello su un dataset di test contenuto in un CSV.
+        Il CSV che contiene il dataset di test viene generato eseguendo la pipeline con lettura in "train/*.jsonl"
+        oppure utilizzando il file CSV salvato in notebooks
 
         Calcola tutte le metriche importanti: accuracy, precision, recall, F1,
         ROC-AUC, confusion matrix, e feature importance basata su permutazioni.
@@ -402,6 +721,8 @@ class QualityClassifier(PipelineStep):
         output_dir : str | None
             Directory dove salvare il report in formato JSON e HTML.
             Se None, il report viene solo stampato a schermo.
+        comparison_result : dict | None
+            Risultato opzionale del benchmark multi-modello da includere nel report.
 
         -------
         Ritorna un dizionario contenente:
@@ -414,45 +735,48 @@ class QualityClassifier(PipelineStep):
             - "feature_names": Nomi delle feature impiegate
             - "timestamp": Data/ora della valutazione
         """
-        # Carica il dataset
-        df = pd.read_csv(csv_path)
-        
-        # Verifica colonne
-        missing_cols = set(self.feature_names) - set(df.columns)
-        if missing_cols:
-            raise ValueError(f"Colonne mancanti nel CSV: {missing_cols}")
-        if label_column not in df.columns:
-            raise ValueError(f"Colonna label '{label_column}' non trovata nel CSV")
+        X, y, _ = self._load_labeled_dataset(
+            csv_path=csv_path,
+            feature_names=self.feature_names,
+            label_column=label_column,
+        )
 
-        # Estrai feature e label
-        X = df[self.feature_names]
-        y = df[label_column].map(LABEL_MAP)
-        
-        if y.isna().any():
-            invalid = df[label_column][y.isna()].unique().tolist()
-            raise ValueError(
-                f"Valori label non validi: {invalid}. Ammessi: 'good', 'bad'."
+        expected_test_csv = self.training_metadata.get("test_csv")
+        if expected_test_csv and os.path.abspath(csv_path) != expected_test_csv:
+            logger.warning(
+                "Il modello e stato addestrato con test set %s, ma la valutazione usa %s",
+                expected_test_csv,
+                os.path.abspath(csv_path),
             )
 
-        # Scala le feature usando lo scaler del modello
+        # Scalo le feature usando lo scaler del modello
         X_scaled = self.scaler.transform(X)
-        X_scaled = pd.DataFrame(X_scaled, columns=self.feature_names)
+        X_scaled = pd.DataFrame(
+            X_scaled,
+            columns=self.feature_names,
+            index=X.index,
+        )
 
         # Predizioni
-        y_pred = self.model.predict(X_scaled)
         y_pred_proba = self.model.predict_proba(X_scaled)[:, 1]  # Probabilità della classe "good"
+        y_pred = (y_pred_proba >= self.threshold).astype(int)
 
         # Calcolo metriche
-        accuracy = accuracy_score(y, y_pred)
-        balanced_acc = balanced_accuracy_score(y, y_pred)
-        roc_auc = roc_auc_score(y, y_pred_proba)
-        f1 = f1_score(y, y_pred)
+        metrics = self._compute_binary_metrics(
+            y_true=y,
+            y_pred=y_pred,
+            y_pred_proba=y_pred_proba,
+        )
+        accuracy = metrics["accuracy"]
+        balanced_acc = metrics["balanced_accuracy"]
+        roc_auc = metrics["roc_auc"]
+        f1 = metrics["f1_score"]
         cm = confusion_matrix(y, y_pred)
         report_dict = classification_report(
-            y, y_pred, target_names=["bad", "good"], output_dict=True
+            y, y_pred, target_names=["bad", "good"], output_dict=True, zero_division=0
         )
         report_str = classification_report(
-            y, y_pred, target_names=["bad", "good"]
+            y, y_pred, target_names=["bad", "good"], zero_division=0
         )
 
         # Feature importance (permutation)
@@ -477,7 +801,7 @@ class QualityClassifier(PipelineStep):
         fpr, tpr, _ = roc_curve(y, y_pred_proba)
         precision_vals, recall_vals, _ = precision_recall_curve(y, y_pred_proba)
 
-        # Stampa report formattato
+        # Stampo report formattato
         self._print_evaluation_report(
             accuracy=accuracy,
             balanced_acc=balanced_acc,
@@ -489,7 +813,7 @@ class QualityClassifier(PipelineStep):
             csv_path=csv_path,
         )
 
-        # Prepara il risultato
+        # Preparo il risultato
         result = {
             "accuracy": round(accuracy, 4),
             "balanced_accuracy": round(balanced_acc, 4),
@@ -502,9 +826,13 @@ class QualityClassifier(PipelineStep):
             "top_features": importance_df.head(10).to_dict(orient="records"),
             "csv_path": csv_path,
             "timestamp": datetime.now().isoformat(),
+            "model_name": self.model_name,
+            "training_metadata": self.training_metadata,
         }
+        if comparison_result is not None:
+            result["model_comparison"] = comparison_result
 
-        # Salva i report se specificato output_dir
+        # Salvo i report se specificato output_dir
         if output_dir:
             self.save_evaluation_report(result, output_dir, importance_df, fpr, tpr, precision_vals, recall_vals)
 
@@ -610,10 +938,6 @@ class QualityClassifier(PipelineStep):
             f.write(html_content)
         logger.info(f"Report HTML salvato: {html_path}")
 
-        print(f"\n✅ Report salvato in:")
-        print(f"   - JSON:  {json_path}")
-        print(f"   - CSV:   {importance_csv_path}")
-        print(f"   - HTML:  {html_path}")
 
     def _generate_html_report(
             self,
@@ -624,9 +948,13 @@ class QualityClassifier(PipelineStep):
             precision_vals,
             recall_vals,
     ) -> str:
-        """Genera un report HTML interattivo."""
+        """Genera un report HTML"""
         cm = evaluation_result["confusion_matrix"]
-        
+        roc_points = json.dumps([{"x": float(f), "y": float(t)} for f, t in zip(fpr, tpr)])
+        pr_points = json.dumps([{"x": float(r), "y": float(p)} for r, p in zip(recall_vals, precision_vals)])
+        importance_total = float(importance_df["importance_mean"].sum()) or 1.0
+        comparison_result = evaluation_result.get("model_comparison")
+
         html = f"""
 <!DOCTYPE html>
 <html lang="it">
@@ -636,86 +964,137 @@ class QualityClassifier(PipelineStep):
     <title>Report Valutazione Modello</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        :root {{
+            --bg: #f3f1ec;
+            --surface: #fffdf9;
+            --border: #d8d1c7;
+            --text: #1f1f1c;
+            --muted: #666157;
+            --accent: #2f5d50;
+            --accent-soft: #e5efe9;
+            --danger: #8e3b2f;
+            --danger-soft: #f4e5e2;
+        }}
         body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f5f5;
+            font-family: Georgia, "Times New Roman", serif;
+            background: var(--bg);
+            color: var(--text);
             margin: 0;
-            padding: 20px;
+            padding: 32px 20px;
         }}
         .container {{
-            max-width: 1200px;
+            max-width: 980px;
             margin: 0 auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            padding: 30px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 32px;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.04);
         }}
         h1 {{
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
+            margin: 0 0 12px 0;
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
         }}
         h2 {{
-            color: #34495e;
-            margin-top: 30px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #ecf0f1;
+            margin: 32px 0 16px 0;
+            font-size: 1.15rem;
+            font-weight: 600;
+            border-top: 1px solid var(--border);
+            padding-top: 24px;
+        }}
+        p {{
+            line-height: 1.6;
+        }}
+        .intro {{
+            color: var(--muted);
+            margin: 0 0 24px 0;
+        }}
+        .meta {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin: 20px 0 8px 0;
+        }}
+        .meta-item {{
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #faf8f4;
+        }}
+        .meta-label {{
+            display: block;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 4px;
         }}
         .metrics-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
             margin: 20px 0;
         }}
         .metric-card {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            background: #fcfbf8;
         }}
         .metric-card h3 {{
-            margin: 0 0 10px 0;
-            font-size: 14px;
-            opacity: 0.9;
+            margin: 0 0 8px 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--muted);
         }}
         .metric-card .value {{
-            font-size: 32px;
-            font-weight: bold;
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--text);
         }}
         .chart-container {{
             position: relative;
-            height: 400px;
-            margin: 30px 0;
+            height: 320px;
+            margin: 18px 0;
             padding: 20px;
-            background: #f9f9f9;
-            border-radius: 8px;
+            background: #faf8f4;
+            border: 1px solid var(--border);
+            border-radius: 10px;
         }}
         .confusion-matrix {{
-            text-align: center;
             margin: 20px 0;
         }}
         .confusion-matrix table {{
-            margin: 0 auto;
+            width: 100%;
             border-collapse: collapse;
         }}
+        .confusion-matrix th,
         .confusion-matrix td {{
-            border: 2px solid #3498db;
-            padding: 15px;
-            font-size: 16px;
-            font-weight: bold;
-            width: 120px;
+            border: 1px solid var(--border);
+            padding: 14px;
+            text-align: center;
         }}
-        .confusion-matrix td:first-child {{
-            background: #ecf0f1;
+        .confusion-matrix th {{
+            background: #f6f2eb;
+            font-weight: 600;
         }}
-        .confusion-matrix tr:first-child td {{
-            background: #ecf0f1;
+        .confusion-matrix .row-label {{
+            text-align: left;
+            background: #f6f2eb;
+            font-weight: 600;
         }}
-        .tn {{ background: #2ecc71; color: white; }}
-        .fp {{ background: #e74c3c; color: white; }}
-        .fn {{ background: #e67e22; color: white; }}
-        .tp {{ background: #27ae60; color: white; }}
+        .tn, .tp {{
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-weight: 700;
+        }}
+        .fp, .fn {{
+            background: var(--danger-soft);
+            color: var(--danger);
+            font-weight: 700;
+        }}
         .features-table {{
             width: 100%;
             border-collapse: collapse;
@@ -724,115 +1103,133 @@ class QualityClassifier(PipelineStep):
         .features-table th, .features-table td {{
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--border);
         }}
         .features-table th {{
-            background: #3498db;
-            color: white;
+            background: #f6f2eb;
+            color: var(--text);
+            font-weight: 600;
         }}
-        .features-table tr:hover {{
-            background: #f5f5f5;
+        .feature-share {{
+            font-size: 0.85rem;
+            color: var(--muted);
         }}
         .progress-bar {{
             width: 100%;
-            height: 20px;
-            background: #ecf0f1;
-            border-radius: 10px;
+            height: 10px;
+            background: #e7e1d7;
+            border-radius: 999px;
             overflow: hidden;
-            margin: 5px 0;
+            margin-top: 6px;
         }}
         .progress-fill {{
             height: 100%;
-            background: linear-gradient(90deg, #3498db, #2ecc71);
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            padding-right: 10px;
-            color: white;
-            font-weight: bold;
-            font-size: 12px;
+            background: var(--accent);
         }}
         .timestamp {{
-            color: #7f8c8d;
-            font-size: 12px;
-            margin-top: 20px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-top: 28px;
             padding-top: 20px;
-            border-top: 1px solid #ecf0f1;
+            border-top: 1px solid var(--border);
+        }}
+        @media (max-width: 640px) {{
+            body {{
+                padding: 16px;
+            }}
+            .container {{
+                padding: 20px;
+            }}
+            .chart-container {{
+                height: 260px;
+            }}
         }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📊 Report di Valutazione del Modello</h1>
-        <p><strong>Dataset:</strong> {evaluation_result['csv_path']}</p>
-        <p><strong>Modello:</strong> {self.model_path}</p>
-        <p><strong>Soglia:</strong> {evaluation_result['threshold']}</p>
-        
-        <h2>🎯 Metriche Principali</h2>
+        <h1>Report di valutazione del modello</h1>
+        <p class="intro">Sintesi delle metriche principali, della matrice di confusione e delle feature piu rilevanti emerse durante la valutazione.</p>
+
+        <div class="meta">
+            <div class="meta-item">
+                <span class="meta-label">Dataset</span>
+                <strong>{evaluation_result['csv_path']}</strong>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Modello</span>
+                <strong>{self.model_path}</strong>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Soglia</span>
+                <strong>{evaluation_result['threshold']}</strong>
+            </div>
+        </div>
+
+        <h2>Metriche principali</h2>
         <div class="metrics-grid">
             <div class="metric-card">
                 <h3>Accuracy</h3>
                 <div class="value">{evaluation_result['accuracy']:.2%}</div>
             </div>
-            <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <div class="metric-card">
                 <h3>Balanced Accuracy</h3>
                 <div class="value">{evaluation_result['balanced_accuracy']:.2%}</div>
             </div>
-            <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <div class="metric-card">
                 <h3>F1-Score</h3>
                 <div class="value">{evaluation_result['f1_score']:.4f}</div>
             </div>
-            <div class="metric-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+            <div class="metric-card">
                 <h3>ROC-AUC</h3>
                 <div class="value">{evaluation_result['roc_auc']:.4f}</div>
             </div>
         </div>
 
-        <h2>🔲 Matrice di Confusione</h2>
+        <h2>Confusion Matrix</h2>
         <div class="confusion-matrix">
             <table>
                 <tr>
-                    <td></td>
-                    <td><strong>Pred: Bad</strong></td>
-                    <td><strong>Pred: Good</strong></td>
+                    <th></th>
+                    <th>Predetto bad</th>
+                    <th>Predetto good</th>
                 </tr>
                 <tr>
-                    <td><strong>Real: Bad</strong></td>
+                    <td class="row-label">Reale bad</td>
                     <td class="tn">{cm[0][0]}</td>
                     <td class="fp">{cm[0][1]}</td>
                 </tr>
                 <tr>
-                    <td><strong>Real: Good</strong></td>
+                    <td class="row-label">Reale good</td>
                     <td class="fn">{cm[1][0]}</td>
                     <td class="tp">{cm[1][1]}</td>
                 </tr>
             </table>
         </div>
 
-        <h2>⭐ Top 10 Features (Importanza)</h2>
+        <h2>Top 10 feature per importanza</h2>
         <table class="features-table">
             <thead>
                 <tr>
                     <th>Feature</th>
-                    <th>Importanza Media</th>
-                    <th>Dev. Std.</th>
-                    <th>Visualizzazione</th>
+                    <th>Importanza media</th>
+                    <th>Dev. std.</th>
+                    <th>Peso relativo</th>
                 </tr>
             </thead>
             <tbody>
 """
-        for idx, row in importance_df.head(10).iterrows():
-            importance_pct = (row["importance_mean"] / importance_df["importance_mean"].sum()) * 100
+        for _, row in importance_df.head(10).iterrows():
+            importance_pct = (row["importance_mean"] / importance_total) * 100
             html += f"""
                 <tr>
                     <td><strong>{row['feature']}</strong></td>
                     <td>{row['importance_mean']:.6f}</td>
                     <td>±{row['importance_std']:.6f}</td>
                     <td>
+                        <div class="feature-share">{importance_pct:.1f}%</div>
                         <div class="progress-bar">
-                            <div class="progress-fill" style="width: {importance_pct}%;">
-                                {importance_pct:.1f}%
-                            </div>
+                            <div class="progress-fill" style="width: {importance_pct}%;"></div>
                         </div>
                     </td>
                 </tr>
@@ -841,21 +1238,51 @@ class QualityClassifier(PipelineStep):
             </tbody>
         </table>
 
-        <h2>📈 Curve di Valutazione</h2>
+        <h2>Curve di valutazione</h2>
         <div class="chart-container">
             <canvas id="rocChart"></canvas>
         </div>
         <div class="chart-container">
             <canvas id="prChart"></canvas>
         </div>
+"""
+        if comparison_result:
+            html += """
+        <h2>Confronto modelli con cross validation</h2>
+        <p class="intro">Benchmark stratificato con la stessa soglia decisionale applicata a ciascun modello. Le differenze sono espresse rispetto al modello baseline.</p>
+        <table class="features-table">
+            <thead>
+                <tr>
+                    <th>Modello</th>
+                    <th>ROC-AUC CV</th>
+                    <th>F1 CV</th>
+                    <th>Balanced Acc CV</th>
+                    <th>Delta ROC-AUC</th>
+                    <th>Delta F1</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+            for row in comparison_result["models"]:
+                html += f"""
+                <tr>
+                    <td><strong>{row['model_name']}</strong></td>
+                    <td>{row['roc_auc_mean']:.4f} ± {row['roc_auc_std']:.4f}</td>
+                    <td>{row['f1_score_mean']:.4f} ± {row['f1_score_std']:.4f}</td>
+                    <td>{row['balanced_accuracy_mean']:.4f} ± {row['balanced_accuracy_std']:.4f}</td>
+                    <td>{row['delta_vs_baseline']['roc_auc_mean']:+.4f}</td>
+                    <td>{row['delta_vs_baseline']['f1_score_mean']:+.4f}</td>
+                </tr>
+"""
+            html += """
+            </tbody>
+        </table>
+"""
 
-        <div class="timestamp">
-            <strong>Generato:</strong> """ + evaluation_result['timestamp'] + """
-        </div>
+        html += """
     </div>
 
     <script>
-        // ROC Curve
         const rocCtx = document.getElementById('rocChart').getContext('2d');
         new Chart(rocCtx, {
             type: 'scatter',
@@ -863,11 +1290,11 @@ class QualityClassifier(PipelineStep):
                 datasets: [
                     {
                         label: 'ROC Curve',
-                        data: """ + json.dumps([{"x": float(f), "y": float(t)} for f, t in zip(fpr, tpr)]) + """,
-                        borderColor: '#3498db',
-                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        data: """ + roc_points + """,
+                        borderColor: '#2f5d50',
+                        backgroundColor: 'rgba(47, 93, 80, 0.08)',
                         fill: false,
-                        tension: 0.1,
+                        tension: 0,
                         showLine: true
                     }
                 ]
@@ -876,17 +1303,31 @@ class QualityClassifier(PipelineStep):
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: true },
-                    title: { display: true, text: 'ROC Curve' }
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: 'ROC Curve',
+                        color: '#1f1f1c',
+                        font: { size: 16, family: 'Georgia, Times New Roman, serif' }
+                    }
                 },
                 scales: {
-                    x: { title: { display: true, text: 'False Positive Rate' }, min: 0, max: 1 },
-                    y: { title: { display: true, text: 'True Positive Rate' }, min: 0, max: 1 }
+                    x: {
+                        title: { display: true, text: 'False Positive Rate', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'True Positive Rate', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    }
                 }
             }
         });
 
-        // Precision-Recall Curve
         const prCtx = document.getElementById('prChart').getContext('2d');
         new Chart(prCtx, {
             type: 'scatter',
@@ -894,11 +1335,11 @@ class QualityClassifier(PipelineStep):
                 datasets: [
                     {
                         label: 'Precision-Recall Curve',
-                        data: """ + json.dumps([{"x": float(r), "y": float(p)} for r, p in zip(recall_vals, precision_vals)]) + """,
-                        borderColor: '#e74c3c',
-                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        data: """ + pr_points + """,
+                        borderColor: '#8e3b2f',
+                        backgroundColor: 'rgba(142, 59, 47, 0.08)',
                         fill: false,
-                        tension: 0.1,
+                        tension: 0,
                         showLine: true
                     }
                 ]
@@ -907,12 +1348,27 @@ class QualityClassifier(PipelineStep):
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: true },
-                    title: { display: true, text: 'Precision-Recall Curve' }
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: 'Precision-Recall Curve',
+                        color: '#1f1f1c',
+                        font: { size: 16, family: 'Georgia, Times New Roman, serif' }
+                    }
                 },
                 scales: {
-                    x: { title: { display: true, text: 'Recall' }, min: 0, max: 1 },
-                    y: { title: { display: true, text: 'Precision' }, min: 0, max: 1 }
+                    x: {
+                        title: { display: true, text: 'Recall', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Precision', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    }
                 }
             }
         });

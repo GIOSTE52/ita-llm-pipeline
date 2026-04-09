@@ -10,7 +10,7 @@ from blocks.classifiers import QualityClassifier, DEFAULT_FEATURE_NAMES
 
 import pandas as pd
 
-def get_language_filter(rejected_dir: str, threshold: float = 0.65):
+def get_language_filter(rejected_dir: str, threshold: float = 0.65, languages = "it"):
     """
     Inizializza il filtro per la lingua italiana.
     
@@ -19,7 +19,7 @@ def get_language_filter(rejected_dir: str, threshold: float = 0.65):
     - threshold: Soglia di confidenza del modello fasttext (0.65 consigliata).
     """
     return LanguageFilter(
-        languages="it",
+        languages=languages,
         language_threshold=threshold,
         exclusion_writer=JsonlWriter(
             output_folder=os.path.join(rejected_dir, "1_language"),
