@@ -23,6 +23,8 @@ Questo script:
 # === Percorsi ===
 csv_path = os.path.join(project_root, "output", "feature", "doc_stats_per_file.csv")
 output_dir = os.path.join(project_root, "data", "splits")
+random_state = 42
+validation_threshold = 0.65
 
 # Create output directory if it doesn't exist
 os.makedirs(output_dir, exist_ok=True)
@@ -35,8 +37,18 @@ print(f"   Totale documenti: {len(df)}")
 
 # === STEP 2: Split 70% train, 15% val, 15% test ===
 print("\n🔀 Split dataset (70% train, 15% val, 15% test)...")
-train_df, temp_df = train_test_split(df, test_size=0.3, stratify=df["label"], random_state=42)
-val_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=temp_df["label"], random_state=42)
+train_df, temp_df = train_test_split(
+    df,
+    test_size=0.3,
+    stratify=df["label"],
+    random_state=random_state,
+)
+val_df, test_df = train_test_split(
+    temp_df,
+    test_size=0.5,
+    stratify=temp_df["label"],
+    random_state=random_state,
+)
 
 print(f"   Train: {len(train_df)} documenti ({len(train_df)/len(df)*100:.1f}%)")
 print(f"   Val:   {len(val_df)} documenti ({len(val_df)/len(df)*100:.1f}%)")
@@ -58,7 +70,27 @@ print(f"Test: {test_csv}")
 
 # === STEP 4: Allena il modello sul training set ===
 print("\nAddestramento del modello...")
-result = QualityClassifier.train_from_csv(train_csv)
+result = QualityClassifier.train_from_csv(
+    csv_path=train_csv,
+    validation_csv_path=val_csv,
+    threshold=validation_threshold,
+    random_state=random_state,
+)
+result["training_metadata"] = {
+    "source_csv": os.path.abspath(csv_path),
+    "train_csv": os.path.abspath(train_csv),
+    "validation_csv": os.path.abspath(val_csv),
+    "test_csv": os.path.abspath(test_csv),
+    "split_strategy": "train_val_test",
+    "split_random_state": random_state,
+    "train_fraction": 0.70,
+    "validation_fraction": 0.15,
+    "test_fraction": 0.15,
+    "train_rows": int(len(train_df)),
+    "validation_rows": int(len(val_df)),
+    "test_rows": int(len(test_df)),
+    "validation_threshold": validation_threshold,
+}
 
 # === STEP 5: Salva il modello ===
 print("\nSalvataggio del modello...")
@@ -66,6 +98,8 @@ model_path = os.path.join(project_root, "models", "lgbm_quality_model.joblib")
 os.makedirs(os.path.dirname(model_path), exist_ok=True)
 QualityClassifier.save_model(result, model_path)
 
-print("\nDone!")
-print("\nPuoi ora valutare il modello sul test set con:")
-print(f"   python3 scripts/evaluate_model.py --model {model_path} --test-csv {test_csv} --output-dir evaluation --threshold 0.7")
+print("\nSplit registrati nel modello e salvati in data/splits:")
+print(f"   Train: {train_csv}")
+print(f"   Val:   {val_csv}")
+print(f"   Test:  {test_csv}")
+print("\nOra puoi valutare il modello sul test set")

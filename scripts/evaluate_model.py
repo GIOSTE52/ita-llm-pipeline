@@ -4,11 +4,11 @@ Script per valutare il classificatore di qualità su un dataset di test scritto 
 Sono necessarie le label, quindi bisogna generare il CSV su un dataset con label presenti.
 
 comando:
-    python3 scripts/evaluate_model.py --model models/lgbm_quality_model.joblib --test-csv notebooks/stats_from_testing.csv --output-dir evaluation --threshold 0.7 --compare-models
+    python3 scripts/evaluate_model.py --model models/lgbm_quality_model.joblib --output-dir evaluation --compare-models
 
 Questo script:
 1. Carica il modello addestrato
-2. Valuta il modello su un dataset di test
+2. Recupera il test split corretto dal modello oppure usa quello passato da CLI
 3. Opzionalmente confronta piu modelli con cross validation
 4. Stampa le statistiche a schermo
 5. Salva un report dettagliato in JSON e HTML
@@ -17,11 +17,29 @@ Questo script:
 import argparse
 import sys
 import os
+import joblib
 
 # Aggiungo src/ al path per importare i moduli del progetto
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from blocks.classifiers import QualityClassifier
+
+
+def load_model_metadata(model_path: str) -> dict:
+    """Carica i metadati utili del modello senza alterare il flusso di valutazione."""
+    artifact = joblib.load(model_path)
+    return {
+        "threshold": artifact.get("threshold"),
+        "training_metadata": artifact.get("training_metadata", {}),
+        "model_name": artifact.get("model_name"),
+    }
+
+
+def resolve_test_csv(explicit_test_csv: str | None, model_metadata: dict) -> str | None:
+    """Recupera il test set corretto, preferendo quello registrato nel modello."""
+    if explicit_test_csv:
+        return explicit_test_csv
+    return model_metadata.get("training_metadata", {}).get("test_csv")
 
 
 def print_model_comparison(comparison_result: dict) -> None:
@@ -83,8 +101,11 @@ def main():
     )
     parser.add_argument(
         "--test-csv",
-        required=True,
-        help="Percorso al CSV di test con feature e label"
+        default=None,
+        help=(
+            "Percorso al CSV di test con feature e label. "
+            "Se omesso prova a usare il test split salvato nel modello."
+        )
     )
     parser.add_argument(
         "--output-dir",
@@ -94,8 +115,11 @@ def main():
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.65,
-        help="Soglia di decisione (default 0.65)"
+        default=None,
+        help=(
+            "Soglia di decisione. Se omessa usa quella salvata nel modello, "
+            "altrimenti 0.65."
+        )
     )
     parser.add_argument(
         "--label-column",
@@ -110,7 +134,10 @@ def main():
     parser.add_argument(
         "--comparison-csv",
         default=None,
-        help="CSV etichettato da usare per la cross validation. Se omesso usa --test-csv."
+        help=(
+            "CSV etichettato da usare per la cross validation. "
+            "Se omesso usa il dataset sorgente registrato nel modello oppure il test CSV risolto."
+        )
     )
     parser.add_argument(
         "--cv-folds",
@@ -141,27 +168,71 @@ def main():
         print(f"Errore: Modello non trovato: {args.model}")
         sys.exit(1)
 
-    if not os.path.exists(args.test_csv):
-        print(f"Errore: Dataset non trovato: {args.test_csv}")
+    model_metadata = load_model_metadata(args.model)
+    training_metadata = model_metadata.get("training_metadata", {})
+    resolved_test_csv = resolve_test_csv(args.test_csv, model_metadata)
+
+    if resolved_test_csv is None:
+        print(
+            "Errore: impossibile determinare il test set. "
+            "Passa --test-csv oppure usa un modello salvato con i metadati dello split."
+        )
         sys.exit(1)
 
+    if not os.path.exists(resolved_test_csv):
+        print(f"Errore: Dataset di test non trovato: {resolved_test_csv}")
+        sys.exit(1)
+
+    if (
+        args.test_csv
+        and training_metadata.get("test_csv")
+        and os.path.abspath(args.test_csv) != training_metadata["test_csv"]
+    ):
+        print(
+            "Avviso: stai valutando su un CSV diverso dal test split registrato nel modello."
+        )
+        print(f"   Test registrato: {training_metadata['test_csv']}")
+        print(f"   Test richiesto:  {os.path.abspath(args.test_csv)}")
+
     try:
+        threshold = args.threshold
+        if threshold is None:
+            threshold = model_metadata.get("threshold")
+        if threshold is None:
+            threshold = 0.65
+
         # Carica il modello
         print("\nCaricamento modello...")
         classifier = QualityClassifier(
             model_path=args.model,
-            threshold=args.threshold
+            threshold=threshold
         )
         print("Modello caricato con successo!")
+        print(f"Threshold in uso: {threshold}")
+        print(f"Test CSV in uso: {resolved_test_csv}")
+        if training_metadata:
+            print("Split di training trovati nel modello:")
+            print(f"   Source: {training_metadata.get('source_csv')}")
+            print(f"   Train:  {training_metadata.get('train_csv')}")
+            print(f"   Val:    {training_metadata.get('validation_csv')}")
+            print(f"   Test:   {training_metadata.get('test_csv')}")
 
         comparison_result = None
         if args.compare_models:
-            comparison_csv = args.comparison_csv or args.test_csv
+            comparison_csv = (
+                args.comparison_csv
+                or training_metadata.get("source_csv")
+                or resolved_test_csv
+            )
+            if not os.path.exists(comparison_csv):
+                print(f"Errore: Dataset per cross validation non trovato: {comparison_csv}")
+                sys.exit(1)
             print("\nBenchmark cross validation in corso...")
+            print(f"Dataset CV in uso: {comparison_csv}")
             comparison_result = QualityClassifier.cross_validate_models(
                 csv_path=comparison_csv,
                 label_column=args.label_column,
-                threshold=args.threshold,
+                threshold=threshold,
                 cv_folds=args.cv_folds,
                 random_state=args.cv_random_state,
                 model_names=args.cv_models,
@@ -171,7 +242,7 @@ def main():
         # Valuta il modello
         print("\nValutazione in corso...")
         result = classifier.evaluate(
-            csv_path=args.test_csv,
+            csv_path=resolved_test_csv,
             label_column=args.label_column,
             output_dir=args.output_dir,
             comparison_result=comparison_result,

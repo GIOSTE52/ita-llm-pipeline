@@ -147,6 +147,10 @@ class QualityClassifier(PipelineStep):
             "model_name",
             self.model.__class__.__name__,
         )
+        self.training_metadata: Dict[str, Any] = artifact.get(
+            "training_metadata",
+            {},
+        )
         self.feature_names = feature_names or self._feature_names_train or DEFAULT_FEATURE_NAMES
 
         logger.info("Modello caricato da %s", self.model_path)
@@ -459,9 +463,11 @@ class QualityClassifier(PipelineStep):
         csv_path: str,
         feature_names: Optional[List[str]] = None,
         label_column: str = "label",
+        validation_csv_path: Optional[str] = None,
         test_size: float = 0.2,
         n_estimators: int = 300,
         learning_rate: float = 0.05,
+        threshold: float = 0.65,
         random_state: int = 42,
     ) -> dict:
         """
@@ -471,6 +477,7 @@ class QualityClassifier(PipelineStep):
         - le colonne corrispondenti alle feature (stessi nomi di DEFAULT_FEATURE_NAMES
           oppure quelli specificati in ``feature_names``)
         - una colonna ``label`` con valori "good" / "bad"
+        - opzionalmente un CSV di validazione separato, per evitare split interni
 
         Restituisce un dizionario con modello, scaler, metriche e
         importanza delle feature.
@@ -523,13 +530,39 @@ class QualityClassifier(PipelineStep):
             print(f"\nNessuna coppia di feature con |correlazione| > {high_corr_threshold}")
 
         # ------- 2. Train / Validation split -------
-        X_train, X_val, y_train, y_val = train_test_split(
-            X,
-            y,
-            test_size=test_size,    # default 0.2 -> 20% validazione
-            stratify=y,     # mantiene la porzione good/bad
-            random_state=random_state,
-        )
+        if validation_csv_path:
+            X_train = X
+            y_train = y
+            X_val, y_val, _ = QualityClassifier._load_labeled_dataset(
+                csv_path=validation_csv_path,
+                feature_names=feat_names,
+                label_column=label_column,
+            )
+            split_metadata = {
+                "split_strategy": "precomputed_validation_csv",
+                "train_csv": os.path.abspath(csv_path),
+                "validation_csv": os.path.abspath(validation_csv_path),
+                "train_rows": int(len(X_train)),
+                "validation_rows": int(len(X_val)),
+                "random_state": random_state,
+            }
+        else:
+            X_train, X_val, y_train, y_val = train_test_split(
+                X,
+                y,
+                test_size=test_size,    # default 0.2 -> 20% validazione
+                stratify=y,     # mantiene la porzione good/bad
+                random_state=random_state,
+            )
+            split_metadata = {
+                "split_strategy": "internal_train_test_split",
+                "train_csv": os.path.abspath(csv_path),
+                "validation_csv": None,
+                "train_rows": int(len(X_train)),
+                "validation_rows": int(len(X_val)),
+                "validation_fraction": float(test_size),
+                "random_state": random_state,
+            }
 
         # ------- 3. Scaling -------
         # Fitto lo scaler solo sul training set per evitare data leakage.
@@ -558,21 +591,29 @@ class QualityClassifier(PipelineStep):
         model.fit(X_train_scaled, y_train)
 
         # ------- 5. Valutazione -------
-        y_pred = model.predict(X_val_scaled)
+        y_pred_proba = model.predict_proba(X_val_scaled)[:, 1]
+        y_pred = (y_pred_proba >= threshold).astype(int)
+        metrics = QualityClassifier._compute_binary_metrics(
+            y_true=y_val,
+            y_pred=y_pred,
+            y_pred_proba=y_pred_proba,
+        )
 
         # Genera un dizionario 
         report = classification_report(
-            y_val, y_pred, target_names=["bad", "good"], output_dict=True
+            y_val, y_pred, target_names=["bad", "good"], output_dict=True,
+            zero_division=0,
         )
         # Genera una string stampabile a schermo
         report_str = classification_report(
-            y_val, y_pred, target_names=["bad", "good"]
+            y_val, y_pred, target_names=["bad", "good"], zero_division=0
         )
         cm = confusion_matrix(y_val, y_pred)
 
         print("=" * 60)
         print("CLASSIFICATION REPORT")
         print("=" * 60)
+        print(f"Soglia decisione validazione: {threshold:.2f}")
         print(report_str)
         print("\nConfusion Matrix:")
         print(cm)
@@ -604,6 +645,12 @@ class QualityClassifier(PipelineStep):
             "scaler": scaler,
             "model_name": "LightGBM",
             "feature_names": feat_names,
+            "threshold": threshold,
+            "validation_metrics": {
+                metric_name: round(metric_value, 4)
+                for metric_name, metric_value in metrics.items()
+            },
+            "split_metadata": split_metadata,
             "classification_report": report,
             "confusion_matrix": cm,
             "correlation_matrix": correlation_matrix,
@@ -633,6 +680,12 @@ class QualityClassifier(PipelineStep):
             "model_name": training_result.get(
                 "model_name",
                 training_result["model"].__class__.__name__,
+            ),
+            "threshold": training_result.get("threshold"),
+            "validation_metrics": training_result.get("validation_metrics"),
+            "training_metadata": training_result.get(
+                "training_metadata",
+                training_result.get("split_metadata", {}),
             ),
         }
         joblib.dump(artifact, output_path)
@@ -688,9 +741,21 @@ class QualityClassifier(PipelineStep):
             label_column=label_column,
         )
 
+        expected_test_csv = self.training_metadata.get("test_csv")
+        if expected_test_csv and os.path.abspath(csv_path) != expected_test_csv:
+            logger.warning(
+                "Il modello e stato addestrato con test set %s, ma la valutazione usa %s",
+                expected_test_csv,
+                os.path.abspath(csv_path),
+            )
+
         # Scalo le feature usando lo scaler del modello
         X_scaled = self.scaler.transform(X)
-        X_scaled = pd.DataFrame(X_scaled, columns=self.feature_names)
+        X_scaled = pd.DataFrame(
+            X_scaled,
+            columns=self.feature_names,
+            index=X.index,
+        )
 
         # Predizioni
         y_pred_proba = self.model.predict_proba(X_scaled)[:, 1]  # Probabilità della classe "good"
@@ -762,6 +827,7 @@ class QualityClassifier(PipelineStep):
             "csv_path": csv_path,
             "timestamp": datetime.now().isoformat(),
             "model_name": self.model_name,
+            "training_metadata": self.training_metadata,
         }
         if comparison_result is not None:
             result["model_comparison"] = comparison_result
@@ -872,10 +938,6 @@ class QualityClassifier(PipelineStep):
             f.write(html_content)
         logger.info(f"Report HTML salvato: {html_path}")
 
-        print(f"\n✅ Report salvato in:")
-        print(f"   - JSON:  {json_path}")
-        print(f"   - CSV:   {importance_csv_path}")
-        print(f"   - HTML:  {html_path}")
 
     def _generate_html_report(
             self,

@@ -34,7 +34,7 @@ def main():
 
     # --- NUOVO PUNTO 5: AGGREGAZIONE CSV ---
     print("\n" + "=" * 60)
-    print("📊 AGGREGAZIONE FINALE CSV: doc_stats_per_file.csv")
+    print("AGGREGAZIONE FINALE CSV: doc_stats_per_file.csv")
     print("=" * 60)
     
     time.sleep(2) 
@@ -50,30 +50,30 @@ def main():
 
     try:
         subprocess.run(merge_cmd, shell=True, check=True)
-        print(f"✅ Unione completata con successo!")
-        print(f"📂 File finale: {final_output_csv}")
+        print(f"Unione completata con successo!")
+        print(f"File finale: {final_output_csv}")
         
         # Pulizia
         subprocess.run(f"rm {temp_pattern}", shell=True)
-        print("🧹 File temporanei dei rank rimossi.")
+        print("File temporanei dei rank rimossi.")
     except Exception as e:
-        print(f"⚠️ Errore durante l'aggregazione CSV: {e}")
+        print(f"Errore durante l'aggregazione CSV: {e}")
 
     # --- FINE AGGREGAZIONE ---
 
     # 6. Recupero delle statistiche di interesse (PipelineStats)
-    stats = PipelineStats(executor.pipeline)
-    print("\n" + "=" * 60)
-    print("REPORT ESECUZIONE PIPELINE")
-    print("=" * 60)
+    # stats = PipelineStats(executor.pipeline)
+    # print("\n" + "=" * 60)
+    # print("REPORT ESECUZIONE PIPELINE")
+    # print("=" * 60)
 
-    for i, step_stats in enumerate(stats.stats):
-        print(f"\n--- Step {i+1}: {step_stats.name} ---")
-        print(f"  ⏱️  Tempo globale: {step_stats.time_stats.global_mean:.2f}s")
-        if step_stats.stats:
-            print(f"  📋 Metriche:")
-            for metric_name, metric_stats in step_stats.stats.items():
-                print(f"     - {metric_name}: {metric_stats.total}")
+    # for i, step_stats in enumerate(stats.stats):
+    #     print(f"\n--- Step {i+1}: {step_stats.name} ---")
+    #     print(f"  ⏱️  Tempo globale: {step_stats.time_stats.global_mean:.2f}s")
+    #     if step_stats.stats:
+    #         print(f"  📋 Metriche:")
+    #         for metric_name, metric_stats in step_stats.stats.items():
+    #             print(f"     - {metric_name}: {metric_stats.total}")
 
     # 7. Analisi finale degli scarti
     print("\n--- 🔍 Analisi Risultati ---")
