@@ -17,17 +17,17 @@ def main():
         data_dir=cfg["DATA_DIR"],
         output_dir=cfg["OUTPUT_DIR"],
         rejected_dir=cfg["REJECTED_DIR"],
+        pattern=cfg["INPUT_SUB_PATTERN"],
         model_path=cfg["MODEL_PATH"]
     )
     
     # 3. Esecuzione
     executor = LocalPipelineExecutor(
         pipeline=pipeline_blocks,
-        tasks=1, #numero giusto per numero di file in test_chunks
+        tasks=cfg["NUM_TASKS"],
         workers=cfg["MAX_WORKERS"]
     )
     # 4. Avvio della pipeline
-    print(f"\nPipeline avviata su: {cfg['DATA_DIR']}")
     executor.run()
 
     # 5. Recupero delle statistiche di interesse
