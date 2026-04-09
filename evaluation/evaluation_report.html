@@ -393,6 +393,60 @@
             <canvas id="prChart"></canvas>
         </div>
 
+        <h2>Confronto modelli con cross validation</h2>
+        <p class="intro">Benchmark stratificato con la stessa soglia decisionale applicata a ciascun modello. Le differenze sono espresse rispetto al modello baseline.</p>
+        <table class="features-table">
+            <thead>
+                <tr>
+                    <th>Modello</th>
+                    <th>ROC-AUC CV</th>
+                    <th>F1 CV</th>
+                    <th>Balanced Acc CV</th>
+                    <th>Delta ROC-AUC</th>
+                    <th>Delta F1</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td><strong>LightGBM</strong></td>
+                    <td>1.0000 ± 0.0001</td>
+                    <td>0.9993 ± 0.0010</td>
+                    <td>0.9993 ± 0.0010</td>
+                    <td>+0.0000</td>
+                    <td>+0.0000</td>
+                </tr>
+
+                <tr>
+                    <td><strong>Random Forest</strong></td>
+                    <td>0.9999 ± 0.0001</td>
+                    <td>0.9993 ± 0.0010</td>
+                    <td>0.9993 ± 0.0010</td>
+                    <td>-0.0001</td>
+                    <td>+0.0000</td>
+                </tr>
+
+                <tr>
+                    <td><strong>Extra Trees</strong></td>
+                    <td>0.9998 ± 0.0003</td>
+                    <td>0.9919 ± 0.0021</td>
+                    <td>0.9920 ± 0.0021</td>
+                    <td>-0.0002</td>
+                    <td>-0.0074</td>
+                </tr>
+
+                <tr>
+                    <td><strong>Logistic Regression</strong></td>
+                    <td>0.9940 ± 0.0004</td>
+                    <td>0.9395 ± 0.0058</td>
+                    <td>0.9428 ± 0.0052</td>
+                    <td>-0.0060</td>
+                    <td>-0.0598</td>
+                </tr>
+
+            </tbody>
+        </table>
+
     </div>
 
     <script>
