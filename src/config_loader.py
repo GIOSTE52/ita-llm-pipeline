@@ -35,13 +35,13 @@ def get_config():
     ROOT_DIR = os.environ.get("ROOT_DIR", args.root_dir)
     OUTPUT_DIR = os.environ.get("OUTPUT_DIR", args.output_dir)
     DATA_DIR = os.environ.get("DATA_DIR", os.path.join(ROOT_DIR, "data"))
+    #modificare qui per cambiare la cartella del dataset
+    INPUT_SUB_PATTERN = "test/*.jsonl"
     
     # --- LOGICA DINAMICA TASK ---
-    if args.tasks is not None:
-        num_tasks = args.tasks
-    else:
-        input_pattern = os.path.join(DATA_DIR, "**/*.jsonl")
-        num_tasks = len(glob.glob(input_pattern, recursive=True))
+    full_search_path = os.path.join(DATA_DIR, INPUT_SUB_PATTERN)
+    found_files = glob.glob(full_search_path)
+    num_tasks = len(found_files)
     # ----------------------------
 
     
@@ -50,6 +50,7 @@ def get_config():
 # 2. Sottocartelle (Logica: Ambiente > Argomento > Default)
     config = {
         "DATA_DIR": DATA_DIR,
+        "INPUT_SUB_PATTERN": INPUT_SUB_PATTERN,
         "OUTPUT_DIR": OUTPUT_DIR,
         "REJECTED_DIR": os.environ.get("REJECTED_DIR", args.rejected_dir or os.path.join(OUTPUT_DIR, "rejected")),
         "FEATURE_DIR": os.environ.get("FEATURE_DIR", args.feature_dir or os.path.join(OUTPUT_DIR, "feature")),

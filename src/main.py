@@ -17,6 +17,7 @@ def main():
         data_dir=cfg["DATA_DIR"],
         output_dir=cfg["OUTPUT_DIR"],
         rejected_dir=cfg["REJECTED_DIR"],
+        pattern=cfg["INPUT_SUB_PATTERN"],
         model_path=cfg["MODEL_PATH"]
     )
     
@@ -27,7 +28,6 @@ def main():
         workers=cfg["MAX_WORKERS"]
     )
     # 4. Avvio della pipeline
-    print(f"\n🚀 Avvio elaborazione: {cfg['NUM_TASKS']} task su {cfg['MAX_WORKERS']} worker.")
     executor.run()
 
     # 5. Recupero delle statistiche di interesse
