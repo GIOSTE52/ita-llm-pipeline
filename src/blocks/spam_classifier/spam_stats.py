@@ -243,5 +243,14 @@ class SpamFeatureCsvWriter(PipelineStep):
             if write_header:
                 writer.writeheader()
             for doc in data:
-                writer.writerow(extract_spam_features(doc))
+                metadata = getattr(doc, "metadata", {}) or {}
+
+                row = {}
+                for col in FEATURE_COLUMNS:
+                    if col == "doc_id":
+                        row[col] = metadata.get("doc_id") or getattr(doc, "id", "") or metadata.get("id", "")
+                    else:
+                        row[col] = metadata.get(col, "")
+
+                writer.writerow(row)
                 yield doc
