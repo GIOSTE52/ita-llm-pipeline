@@ -13,7 +13,7 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, pattern,
     """
     return [
         # 1. Lettura
-        get_jsonl_reader(data_dir,  pattern = pattern),
+        get_jsonl_reader(data_dir,  pattern = "test/*.jsonl"),
         
         # 2. Filtro Lingua (Ora richiamato dal tuo modulo filters)
         get_language_filter(rejected_dir, threshold=0.75, languages = "it"),
@@ -43,7 +43,6 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, pattern,
         # ),
         
         # 6. Estrazione Statistiche (CSV)
-
         DocStatsCsv(
             output_folder=os.path.join(output_dir, "feature"),
             csv_filename="doc_stats_per_file.csv",
