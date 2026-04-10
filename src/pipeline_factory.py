@@ -52,12 +52,12 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, pattern,
 
 
         # 7. Classificazione italiana con QualityClassifier
-        # ItalianClassification(
-        #     model_path = os.path.join(model_path, "lgbm_quality_model.joblib"),
-        #     rejected_dir = rejected_dir,
-        #     output_folder = output_dir,
-        #     threshold = 0.65
-        # ),
+        ItalianClassification(
+            model_path = os.path.join(model_path, "lgbm_quality_model.joblib"),
+            rejected_dir = rejected_dir,
+            output_folder = output_dir,
+            threshold = 0.65
+        ),
 
         # 7. Scrittura Finale
         get_jsonl_writer(output_dir)

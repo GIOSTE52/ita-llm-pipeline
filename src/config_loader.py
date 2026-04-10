@@ -36,7 +36,7 @@ def get_config():
     OUTPUT_DIR = os.environ.get("OUTPUT_DIR", args.output_dir)
     DATA_DIR = os.environ.get("DATA_DIR", os.path.join(ROOT_DIR, "data"))
     #modificare qui per cambiare la cartella del dataset
-    INPUT_SUB_PATTERN = "train/*.jsonl"
+    INPUT_SUB_PATTERN = "test/*.jsonl"
     
     # --- LOGICA DINAMICA TASK ---
     full_search_path = os.path.join(DATA_DIR, INPUT_SUB_PATTERN)
@@ -47,7 +47,7 @@ def get_config():
     
     
     # 2. Sottocartelle (Default calcolati)
-# 2. Sottocartelle (Logica: Ambiente > Argomento > Default)
+    # 2. Sottocartelle (Logica: Ambiente > Argomento > Default)
     config = {
         "DATA_DIR": DATA_DIR,
         "INPUT_SUB_PATTERN": INPUT_SUB_PATTERN,
