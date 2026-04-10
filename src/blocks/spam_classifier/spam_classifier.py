@@ -50,14 +50,16 @@ class SpamClassifier(PipelineStep):
         super().__init__()
         self.model_path = model_path
         
+        artifact = joblib.load(self.model_path)
+        
+        self.model: lgb.LGBMClassifier = artifact["model"]
+        self.scaler: StandardScaler = artifact["scaler"]
+        self._feature_names_train: List[str] = artifact.get("feature_names", DEFAULT_FEATURE_NAMES)
+
         #se la trashold non è impostata usa come predefinito 0.5
         saved_threshold = artifact.get("threshold", 0.5)
         self.threshold = float(saved_threshold if threshold is None else threshold)
 
-        artifact = joblib.load(self.model_path)
-        self.model: lgb.LGBMClassifier = artifact["model"]
-        self.scaler: StandardScaler = artifact["scaler"]
-        self._feature_names_train: List[str] = artifact.get("feature_names", DEFAULT_FEATURE_NAMES)
         self.feature_names = feature_names or self._feature_names_train
 
         logger.info(
@@ -249,6 +251,7 @@ class SpamClassifier(PipelineStep):
             "scaler": scaler,
             "feature_names": feat_names,
             "label_column": label_column,
+            "threshold": float(threshold),
             "classification_report": classification_report(
                 y_test, 
                 y_pred, 
@@ -258,6 +261,7 @@ class SpamClassifier(PipelineStep):
             "confusion_matrix": confusion_matrix(y_test, y_pred),
             "roc_auc": auc,
             "feature_importance": importances,
+            
         }
 
     @staticmethod

@@ -6,6 +6,7 @@ from datatrove.utils.stats import PipelineStats
 import os
 import subprocess
 import time
+import glob
 
 def main():
     """
@@ -69,20 +70,24 @@ def main():
     spam_final_name = "spam_doc_features.csv"
     spam_final_output_csv = os.path.join(feature_dir, spam_final_name)
     spam_temp_pattern = os.path.join(feature_dir, f"rank_*_{spam_final_name}")
-
     spam_merge_cmd = (
         f"awk 'FNR==1 && NR!=1{{next;}}{{print}}' "
         f"{spam_temp_pattern} > {spam_final_output_csv}"
     )
 
+    spam_parts = glob.glob(os.path.join(feature_dir, f"rank_*_{spam_final_name}"))
+
     try:
-        subprocess.run(spam_merge_cmd, shell=True, check=True)
-        print("Unione spam completata con successo!")
-        print(f"File finale: {spam_final_output_csv}")
-    
-        subprocess.run(f"rm {spam_temp_pattern}", shell=True)
-        print("File temporanei spam dei rank rimossi.")
-    
+        if spam_parts:
+            subprocess.run(spam_merge_cmd, shell=True, check=True)
+            print("Unione spam completata con successo!")
+            print(f"File finale: {spam_final_output_csv}")
+
+            subprocess.run(f"rm {spam_temp_pattern}", shell=True, check=True)
+            print("File temporanei spam dei rank rimossi.")
+        else:
+            print("Nessun file CSV spam temporaneo trovato, salto aggregazione.")
+
     except Exception as e:
         print(f"Errore durante l'aggregazione CSV spam: {e}")
     # --- FINE AGGREGAZIONE ---
