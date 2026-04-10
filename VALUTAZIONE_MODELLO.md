@@ -27,11 +27,11 @@ python scripts/evaluate_model.py \
 - `--cv-models`: (Opzionale) Sottoinsieme di modelli da confrontare (`lightgbm`, `random_forest`, `extra_trees`, `logistic_regression`)
 
 **Output:**
-- ✅ Report stampato a schermo con metriche, confusion matrix, feature importance
-- ✅ Tabella comparativa tra modelli con differenze rispetto al baseline LightGBM
-- 📄 `evaluation_report.json` - Dati strutturati per ulteriore analisi
-- 📊 `feature_importance.csv` - Importanza delle feature in formato CSV
-- 🌐 `evaluation_report.html` - Report interattivo con grafici ROC e Precision-Recall
+- Stampa report a schermo con metriche, confusion matrix, feature importance
+- Tabella comparativa tra modelli con differenze rispetto al baseline LightGBM
+- Genera `evaluation_report.json` - Dati strutturati per ulteriore analisi
+- Genera `feature_importance.csv` - Importanza delle feature in formato CSV
+- Genera `evaluation_report.html` - Report interattivo con grafici ROC e Precision-Recall
 
 ---
 
@@ -64,9 +64,9 @@ print(f"Top features: {result['top_features']}")
 ## Formato del CSV di Test
 
 Il CSV deve contenere:
-1. **Colonne di feature** - Stessi nomi di `DEFAULT_FEATURE_NAMES` in `classifiers.py`
+1. **Colonne di feature** - Contiene le features elencate in `DEFAULT_FEATURE_NAMES` all'interno di `classifiers.py`
 2. **Colonna label** - Con valori "good" o "bad"
-3. (Opzionale) **Colonna doc_id** - Per tracciare i documenti
+3. **Colonna doc_id** - Per tracciare i documenti
 
 **Esempio:**
 ```csv
@@ -80,24 +80,24 @@ doc_002,456,0.22,0.10,...,bad
 
 ## Metriche Calcolate
 
-### 🎯 Globali
+### Globali
 - **Accuracy**: Percentuale di predizioni corrette
 - **Balanced Accuracy**: Accuracy pesata per classi sbilanciate
 - **F1-Score**: Media armonica di precision e recall
 - **ROC-AUC**: Area sotto la curva ROC (0.5 = random, 1.0 = perfetto)
 
-### 🔲 Confusion Matrix
+### Confusion Matrix
 ```
               Predicted:Bad  Predicted:Good
 Actual:Bad         TN              FP
 Actual:Good        FN              TP
 ```
 
-### ⭐ Feature Importance
+### Feature Importance
 - **Importanza Media**: Media della variazione di performance rimuovendo ogni feature
 - **Std Dev**: Deviazione standard dell'importanza
 
-### 📊 Curve di Valutazione
+### Curve di Valutazione
 - **ROC Curve**: Trade-off tra True Positive Rate e False Positive Rate
 - **Precision-Recall Curve**: Trade-off tra Precision e Recall
 
@@ -132,12 +132,12 @@ QualityClassifier.save_model(result, "models/my_model.joblib")
 python scripts/evaluate_model.py \
     --model models/my_model.joblib \
     --test-csv data/test/dataset_test.csv \
-    --output-dir output/eval_results \
+    --output-dir evaluation \
     --threshold 0.65
 ```
 
 ### Visualizzare il Report HTML
-1. Apri il file `output/eval_results/evaluation_report.html` in un browser
+1. Apri il file `evaluation/evaluation_report.html` in un browser
 2. Visualizza interattivamente:
    - Metriche principali
    - Matrice di confusione
@@ -180,9 +180,9 @@ I report vengono salvati in tre formati:
 
 ---
 
-## Personalizzazioni Avanzate
+## Personalizzazione Avanzata
 
-Se vuoi estendere la valutazione, puoi personalizzare:
+E' possibile calcolare metriche personalizzate:
 
 ```python
 class MyQualityClassifier(QualityClassifier):
@@ -198,4 +198,3 @@ class MyQualityClassifier(QualityClassifier):
 
 ---
 
-**Domande?** Vedi `src/blocks/classifiers.py` per il codice sorgente completo.
