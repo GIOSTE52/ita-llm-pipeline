@@ -4,7 +4,7 @@ from blocks.writers import get_jsonl_writer
 from blocks.filters import get_language_filter, CustomItalianFilter, ItalianClassification
 from blocks.stats import DocStatsCsv
 
-from blocks.spam_classifier.spam_classifier import SpamClassifier
+from blocks.spam_classifier.spam_classifier import SpamFilter
 from blocks.spam_classifier.spam_stats import SpamFeatureExtractor, SpamFeatureCsvWriter
 
 def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, pattern, model_path):
@@ -28,19 +28,21 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, pattern,
         # NON scrive CSV, mette solo i dati nei metadata temporanei
         SpamFeatureExtractor(),
 
-        # # 5. SPAM: Classifier (Usa il modello .joblib)
-        # # Se il documento è etichettato come spam, viene scartato qui
-        SpamClassifier(
-            model_path=os.path.join(model_path, "spam_lgbm.joblib"),
-            threshold=0.7
-        ),
-
-        # 5. Writer specifico per lo Spam (Salva i dati)
+        # 5. SPAM: salva le feature calcolate sui testi nel csv
         SpamFeatureCsvWriter(
         # Usiamo os.path.join per essere sicuri che funzioni su ogni sistema
             output_folder=os.path.join(output_dir, "feature"), 
             csv_filename="spam_doc_features.csv"
         ),
+
+        # sPAM: filtro per spam
+        SpamFilter(
+            model_path=os.path.join(model_path, "spam_lgbm.joblib"),
+            rejected_dir=rejected_dir,
+            threshold=0.7
+        ),
+
+        
         
         # 6. Estrazione Statistiche (CSV)
         DocStatsCsv(

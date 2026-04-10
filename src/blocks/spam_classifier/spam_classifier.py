@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import joblib
 import lightgbm as lgb
@@ -16,6 +16,9 @@ from sklearn.preprocessing import StandardScaler
 
 from datatrove.pipeline.base import PipelineStep
 from datatrove.data import DocumentsPipeline
+from datatrove.pipeline.filters.base_filter import BaseFilter
+from datatrove.pipeline.writers import JsonlWriter
+
 
 from .spam_stats import FEATURE_COLUMNS
 
@@ -23,24 +26,33 @@ logger = logging.getLogger(__name__)
 
 LABEL_MAP = {"ham": 0, "spam": 1}
 INV_LABEL_MAP = {0: "ham", 1: "spam"}
+
 LABEL_COLUMNS = ["spam_target_label", "target_label"]
+
 DEFAULT_FEATURE_NAMES: List[str] = [
     c for c in FEATURE_COLUMNS if c not in {"doc_id", "target_label", "spam_target_label"}
 ]
 
 
 class SpamClassifier(PipelineStep):
+    """
+    Motore di inferenza spam.
+    NON filtra i documenti: aggiunge solo metadata di predizione.
+    """
     name = "Spam Classifier"
 
     def __init__(
         self,
         model_path: str,
         feature_names: Optional[List[str]] = None,
-        threshold: float = 0.5,
+        threshold: Optional[float] = None,
     ):
         super().__init__()
         self.model_path = model_path
-        self.threshold = threshold
+        
+        #se la trashold non è impostata usa come predefinito 0.5
+        saved_threshold = artifact.get("threshold", 0.5)
+        self.threshold = float(saved_threshold if threshold is None else threshold)
 
         artifact = joblib.load(self.model_path)
         self.model: lgb.LGBMClassifier = artifact["model"]
@@ -48,9 +60,14 @@ class SpamClassifier(PipelineStep):
         self._feature_names_train: List[str] = artifact.get("feature_names", DEFAULT_FEATURE_NAMES)
         self.feature_names = feature_names or self._feature_names_train
 
-        logger.info("Spam model caricato da %s", self.model_path)
+        logger.info(
+            "Spam model caricato da %s | feature=%d | threshold=%.3f",
+            self.model_path,
+            len(self.feature_names),
+            self.threshold,
+        )
 
-    def _extract_features(self, doc):
+    def _extract_features(self, doc) -> Optional[List[float]]:
         values = []
         metadata = getattr(doc, "metadata", {}) or {}
         try:
@@ -60,24 +77,31 @@ class SpamClassifier(PipelineStep):
         except Exception as e:
             logger.warning("Feature mancanti/non numeriche per doc %s: %s", getattr(doc, "id", ""), e)
             return None
+    
+    def _predict_from_features(self, feats: List[float]) -> Tuple[str, float]:
+        X = np.array(feats, dtype=float).reshape(1, -1)
+        Xs = self.scaler.transform(X)
+        proba = self.model.predict_proba(Xs)[0]
+        spam_score = float(proba[1])
+        pred_label = "spam" if spam_score >= self.threshold else "ham"
+        return pred_label, spam_score
 
+    def predict_doc(self, doc) -> Tuple[str, float]:
+        feats = self._extract_features(doc)
+        if feats is None:
+            return "ham", 0.0
+        return self._predict_from_features(feats)
+    
     def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
         for doc in data:
-            feats = self._extract_features(doc)
-            if feats is None:
-                doc.metadata["spam_pred_label"] = "ham"
-                doc.metadata["spam_pred_score"] = 0.0
-                yield doc
-                continue
+            pred_label, spam_score = self.predict_doc(doc)
 
-            X = np.array(feats, dtype=float).reshape(1, -1)
-            Xs = self.scaler.transform(X)
-            proba = self.model.predict_proba(Xs)[0]
-            spam_score = float(proba[1])
-            pred_label = "spam" if spam_score >= self.threshold else "ham"
+            if getattr(doc, "metadata", None) is None:
+                doc.metadata = {}
 
             doc.metadata["spam_pred_label"] = pred_label
-            doc.metadata["spam_pred_score"] = round(spam_score, 6)
+            doc.metadata["spam_pred_score"] = round(float(spam_score), 6)
+
             yield doc
 
     @staticmethod
@@ -86,9 +110,11 @@ class SpamClassifier(PipelineStep):
             if label_column not in df.columns:
                 raise ValueError(f"Colonna label '{label_column}' non trovata nel CSV")
             return label_column
+        
         for candidate in LABEL_COLUMNS:
             if candidate in df.columns:
                 return candidate
+        
         raise ValueError("Nessuna colonna label valida trovata nel CSV (spam_target_label/target_label)")
 
     @staticmethod
@@ -122,6 +148,7 @@ class SpamClassifier(PipelineStep):
         n_estimators: int = 300,
         learning_rate: float = 0.05,
         random_state: int = 42,
+        threshold: float = 0.5,
     ) -> dict:
         df = pd.read_csv(csv_path)
 
@@ -133,6 +160,7 @@ class SpamClassifier(PipelineStep):
 
         df[label_column] = df[label_column].astype(str).str.strip().str.lower()
         df = df[df[label_column].isin(["ham", "spam"])].copy()
+
         if df.empty:
             raise ValueError("Nessuna riga valida trovata nel CSV per il training")
 
@@ -142,6 +170,7 @@ class SpamClassifier(PipelineStep):
         # remove constant junk before split
         X, dropped_constants, near_constants = SpamClassifier._drop_bad_features(X)
         feat_names = X.columns.tolist()
+
         if len(feat_names) < 2:
             raise ValueError("Dopo la pulizia restano troppo poche feature")
 
@@ -172,19 +201,22 @@ class SpamClassifier(PipelineStep):
             verbosity=-1,
         )
         model.fit(X_train_s, y_train)
-
-        y_pred = model.predict(X_test_s)
+        
         y_prob = model.predict_proba(X_test_s)[:, 1]
-
+        y_pred = (y_prob >= threshold).astype(int)
+        
         print("=" * 60)
         print("SPAM CLASSIFICATION REPORT")
         print("=" * 60)
         print(f"Feature usate nel training: {len(feat_names)}")
+
         if dropped_constants:
             print(f"Feature costanti rimosse: {', '.join(dropped_constants)}")
         if near_constants:
             print(f"Feature quasi costanti rilevate: {', '.join(near_constants)}")
+
         print(classification_report(y_test, y_pred, target_names=["ham", "spam"]))
+
         print("\nConfusion Matrix:")
         print(confusion_matrix(y_test, y_pred))
 
@@ -218,7 +250,10 @@ class SpamClassifier(PipelineStep):
             "feature_names": feat_names,
             "label_column": label_column,
             "classification_report": classification_report(
-                y_test, y_pred, target_names=["ham", "spam"], output_dict=True
+                y_test, 
+                y_pred, 
+                target_names=["ham", "spam"], 
+                output_dict=True
             ),
             "confusion_matrix": confusion_matrix(y_test, y_pred),
             "roc_auc": auc,
@@ -233,6 +268,51 @@ class SpamClassifier(PipelineStep):
             "scaler": result["scaler"],
             "feature_names": result["feature_names"],
             "label_column": result.get("label_column", "spam_target_label"),
+            "threshold": float(result.get("threshold", 0.5)),
         }
         joblib.dump(artifact, output_path)
         print(f"[OK] Modello salvato in: {output_path}")
+
+    class SpamFilter(BaseFilter):
+        """ 
+        Filtro spam vero e proprio.
+
+        - I documenti ham continuano nella pipeline
+        - I documenti spam vengono scartati e salvati nella cartella rejected
+        """
+        
+    name = "Spam Filter"
+
+    def __init__(
+        self,
+        model_path: str,
+        rejected_dir: str,
+        threshold: Optional[float] = None,
+    ):
+        self.classifier = SpamClassifier(
+            model_path=model_path,
+            threshold=threshold,
+        )
+
+        exclusion_writer = JsonlWriter(
+            output_folder=os.path.join(rejected_dir, "2_spam"),
+            output_filename="spam_rejected_${rank}.jsonl",
+            compression=None,
+        )
+
+        super().__init__(exclusion_writer=exclusion_writer)
+
+    def filter(self, doc):
+        if getattr(doc, "metadata", None) is None:
+            doc.metadata = {}
+
+        pred_label, spam_score = self.classifier.predict_doc(doc)
+
+        doc.metadata["spam_pred_label"] = pred_label
+        doc.metadata["spam_pred_score"] = round(float(spam_score), 6)
+
+        if pred_label == "spam":
+            doc.metadata["spam_reject_reason"] = "spam_detected"
+            return False, "spam_detected"
+
+        return True

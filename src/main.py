@@ -59,6 +59,32 @@ def main():
     except Exception as e:
         print(f"Errore durante l'aggregazione CSV: {e}")
 
+    # --- AGGREGAZIONE CSV SPAM ---
+    print("\n" + "=" * 60)
+    print("AGGREGAZIONE FINALE CSV: spam_doc_features.csv")
+    print("=" * 60)
+
+    time.sleep(1)
+
+    spam_final_name = "spam_doc_features.csv"
+    spam_final_output_csv = os.path.join(feature_dir, spam_final_name)
+    spam_temp_pattern = os.path.join(feature_dir, f"rank_*_{spam_final_name}")
+
+    spam_merge_cmd = (
+        f"awk 'FNR==1 && NR!=1{{next;}}{{print}}' "
+        f"{spam_temp_pattern} > {spam_final_output_csv}"
+    )
+
+    try:
+        subprocess.run(spam_merge_cmd, shell=True, check=True)
+        print("Unione spam completata con successo!")
+        print(f"File finale: {spam_final_output_csv}")
+    
+        subprocess.run(f"rm {spam_temp_pattern}", shell=True)
+        print("File temporanei spam dei rank rimossi.")
+    
+    except Exception as e:
+        print(f"Errore durante l'aggregazione CSV spam: {e}")
     # --- FINE AGGREGAZIONE ---
 
     # 6. Recupero delle statistiche di interesse (PipelineStats)

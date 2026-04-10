@@ -223,6 +223,8 @@ class SpamFeatureExtractor(PipelineStep):
                 doc.metadata[k] = v
             yield doc
 
+# prima i writer scrivevano in parallelo sullo stesso csv, 
+#ora sono separati e poi vengono uniti alla fine
 
 class SpamFeatureCsvWriter(PipelineStep):
     name = "Spam Feature CSV Writer"
@@ -234,21 +236,29 @@ class SpamFeatureCsvWriter(PipelineStep):
 
     def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
         os.makedirs(self.output_folder, exist_ok=True)
-        csv_path = os.path.join(self.output_folder, self.csv_filename)
+        rank_filename = f"rank_{rank}_{self.csv_filename}"
+        csv_path = os.path.join(self.output_folder, rank_filename)
+
         file_exists = os.path.exists(csv_path)
         write_header = not file_exists or os.path.getsize(csv_path) == 0
 
         with open(csv_path, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=FEATURE_COLUMNS)
+
             if write_header:
                 writer.writeheader()
+
             for doc in data:
                 metadata = getattr(doc, "metadata", {}) or {}
-
                 row = {}
+
                 for col in FEATURE_COLUMNS:
                     if col == "doc_id":
-                        row[col] = metadata.get("doc_id") or getattr(doc, "id", "") or metadata.get("id", "")
+                        row[col] = (
+                            metadata.get("doc_id")
+                            or getattr(doc, "id", "")
+                            or metadata.get("id", "")
+                        )
                     else:
                         row[col] = metadata.get(col, "")
 
