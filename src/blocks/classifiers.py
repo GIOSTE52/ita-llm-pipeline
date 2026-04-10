@@ -73,27 +73,18 @@ DEFAULT_FEATURE_NAMES: List[str] = [
 "semicolon_ratio",
 "stopword_ratio", # può aiutare ma può anche creare bias (importante per capire la scorrevolezza di un testo)
 "line_count",
-"paragraph_count",
 "avg_line_length",
 "avg_paragraph_length",
-"empty_line_ratio",
-"bullet_point_count",
 "bullet_point_ratio",
-"url_count",
 "url_density",
-"email_count",
 "email_density",
-"html_tag_count",
-"html_tag_ratio",
 "special_char_ratio",
 "most_common_word_freq",    # molto importante per capire la scorrevolezza di un testo
 "repeated_word_count",
 "repeated_word_ratio",  # molto importante per capire la scorrevolezza di un testo
-"repeated_char_count",
 "repeated_char_ratio",
 "repeated_sequence_count",
 "text_entropy", # molto importante per calcolare la qualità del testo
-"unique_word_count",
 "unique_word_ratio",    # molto importante per capire la scorrevolezza di un testo
 "all_caps_word_ratio",
 "all_lowercase_word_ratio",
