@@ -1,4 +1,4 @@
-# GitHub: file .gitignore per progetto (Python / ML / general)
+# GitHub: file .gitignore per progetto
 # Ignora file temporanei, virtualenv, dati, pesi modelli, credenziali, IDE settings, cache
 
 # Test files
@@ -41,7 +41,7 @@ htmlcov/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Data / artifacts / models (non condividere file di training o pesi)
+# Data / artifacts / models 
 # data/
 # datasets/
 # data_raw/
