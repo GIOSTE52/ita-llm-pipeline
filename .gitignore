@@ -1,6 +1,11 @@
 # GitHub: file .gitignore per progetto (Python / ML / general)
 # Ignora file temporanei, virtualenv, dati, pesi modelli, credenziali, IDE settings, cache
 
+# Test files
+tests/
+pytest.ini
+requirements-dev.txt
+
 # Byte-compiled / caches
 __pycache__/
 *.py[cod]
