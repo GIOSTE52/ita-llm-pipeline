@@ -35,11 +35,11 @@ def load_model_metadata(model_path: str) -> dict:
     }
 
 
-def resolve_test_csv(explicit_test_csv: str | None, model_metadata: dict) -> str | None:
+def resolve_test_csv(explicit_test_csv: str | None, training_metadata: dict) -> str | None:
     """Recupera il test set corretto, preferendo quello registrato nel modello."""
     if explicit_test_csv:
         return explicit_test_csv
-    return model_metadata.get("training_metadata", {}).get("test_csv")
+    return training_metadata.get("test_csv")
 
 
 def print_model_comparison(comparison_result: dict) -> None:
@@ -170,7 +170,7 @@ def main():
 
     model_metadata = load_model_metadata(args.model)
     training_metadata = model_metadata.get("training_metadata", {})
-    resolved_test_csv = resolve_test_csv(args.test_csv, model_metadata)
+    resolved_test_csv = resolve_test_csv(args.test_csv, training_metadata)
 
     if resolved_test_csv is None:
         print(
@@ -180,7 +180,7 @@ def main():
         sys.exit(1)
 
     if not os.path.exists(resolved_test_csv):
-        print(f"Errore: Dataset di test non trovato: {resolved_test_csv}")
+        print(f"Errore: CSV di test non trovato: {resolved_test_csv}")
         sys.exit(1)
 
     if (
@@ -197,9 +197,7 @@ def main():
     try:
         threshold = args.threshold
         if threshold is None:
-            threshold = model_metadata.get("threshold")
-        if threshold is None:
-            threshold = 0.65
+            threshold = model_metadata.get("threshold") or 0.65
 
         # Carica il modello
         print("\nCaricamento modello...")
@@ -239,7 +237,9 @@ def main():
             )
             print_model_comparison(comparison_result)
 
-        # Valuta il modello
+
+#   Da qui in poi viene usato il metodo del classificatore. Da modificare se si vuole integrare la valutazione in questo script o in report.ipynb
+        # Valutazione del modello con il metodo associato
         print("\nValutazione in corso...")
         result = classifier.evaluate(
             csv_path=resolved_test_csv,

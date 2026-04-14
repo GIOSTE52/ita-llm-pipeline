@@ -56,8 +56,6 @@ class CustomItalianFilter(BaseFilter):
         bad_count = sum(1 for word in self.bad_keywords if word in text_lower)
         return bad_count < 3
     
-# Da sviluppare in seguito, ogni testo etichettato dal classificatore in input a questo blocco
-# deve essere poi maneggiato per fare sì che si trovi in /output oppure /rejected
 class ItalianClassification(BaseFilter):
     """
     Filtro di qualita basato su ``QualityClassifier``.
