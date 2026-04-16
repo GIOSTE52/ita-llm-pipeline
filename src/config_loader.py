@@ -41,7 +41,7 @@ def get_config():
     # --- LOGICA DINAMICA TASK ---
     full_search_path = os.path.join(DATA_DIR, INPUT_SUB_PATTERN)
     found_files = glob.glob(full_search_path)
-    num_tasks = len(found_files)
+    num_tasks = args.tasks or len(found_files)
     # ----------------------------
 
     

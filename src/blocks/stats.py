@@ -69,7 +69,7 @@ class DocStatsCsv(DocStats):
     @property
     def lid_model(self):
         if self._lid_model is None:
-            self._lid_model = FT176LID(self.languages)
+            self._lid_model = FT176LID([self.languages])
         return self._lid_model
 
     def _calculate_entropy(self, text: str) -> float:
