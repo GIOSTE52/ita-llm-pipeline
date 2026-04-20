@@ -481,11 +481,6 @@ class QualityClassifier(PipelineStep):
 
         Restituisce un dizionario con modello, scaler, metriche e
         importanza delle feature.
-
-        Esempio
-        -------
-        result = QualityClassifier.train_from_csv("data/quality_dataset.csv")
-        QualityClassifier.save_model(result, "models/quality_model.joblib")
         """
         # ------- 1. Caricamento dati -------
         X, y, feat_names = QualityClassifier._load_labeled_dataset(
@@ -667,9 +662,9 @@ class QualityClassifier(PipelineStep):
         training_result : dict
             Dizionario restituito da ``train_from_csv()``.
         output_path : str
-            Percorso del file .joblib di output.
+            Percorso dove salvare il file .joblib.
 
-        Ritorna il percorso assoluto del file salvato.
+        Restituisce il percorso assoluto del file salvato.
         """
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
@@ -703,12 +698,9 @@ class QualityClassifier(PipelineStep):
     ) -> dict:
         """
         Valuta il modello su un dataset di test contenuto in un CSV.
-        Il CSV che contiene il dataset di test viene generato eseguendo la pipeline con lettura in "train/*.jsonl"
-        oppure utilizzando il file CSV salvato in notebooks
 
         Calcola tutte le metriche importanti: accuracy, precision, recall, F1,
-        ROC-AUC, confusion matrix, e feature importance basata su permutazioni.
-        Stampa i risultati a schermo e, opzionalmente, li salva su file JSON e HTML.
+        ROC-AUC, confusion matrix, e feature importance.
 
         Parametri
         ---------

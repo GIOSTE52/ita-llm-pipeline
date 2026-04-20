@@ -14,19 +14,25 @@ Avviare come:
 python3 scripts/training_lgbmclassifier.py
 
 Questo script:
-1. Splitte il dataset in train (70%), val (15%), test (15%)
+1. Effettua lo slit del dataset in train (70%), val (15%), test (15%)
 2. Allena il modello su train
 3. Valuta su val
-4. Salva tutte e 3 le parti per usi futuri
+4. Salva tutte e 3 le parti per usi futuri (es. per valutazione performance del modello)
 """
 
 # === Percorsi ===
 csv_path = os.path.join(project_root, "output", "feature", "doc_stats_per_file.csv")
+if not os.path.exists(csv_path):
+    print("Errore: file CSV non trovato.")
+    print(f"Percorso atteso: {csv_path}")
+    print("Esegui prima la pipeline su un dataset etichettato così che genera un dataset formato csv. Utilizza docker compose up --build")
+    sys.exit(1)
 output_dir = os.path.join(project_root, "data", "splits")
+# scrivo i valori di default per il random_state e la threshold
 random_state = 42
 validation_threshold = 0.65
 
-# Create output directory if it doesn't exist
+# Se non esiste, creo la cartella che ospiterà i 3 datasets
 os.makedirs(output_dir, exist_ok=True)
 
 # === STEP 1: Leggi il dataset completo ===
@@ -36,7 +42,7 @@ df = pd.read_csv(csv_path)
 print(f"   Totale documenti: {len(df)}")
 
 # === STEP 2: Split 70% train, 15% val, 15% test ===
-print("\n🔀 Split dataset (70% train, 15% val, 15% test)...")
+print("\nSplitting dataset (70% train, 15% val, 15% test)...")
 train_df, temp_df = train_test_split(
     df,
     test_size=0.3,
@@ -76,6 +82,7 @@ result = QualityClassifier.train_from_csv(
     threshold=validation_threshold,
     random_state=random_state,
 )
+# scrivo metadata possibilmente utili in futuro
 result["training_metadata"] = {
     "source_csv": os.path.abspath(csv_path),
     "train_csv": os.path.abspath(train_csv),

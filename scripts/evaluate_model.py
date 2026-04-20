@@ -238,27 +238,61 @@ def main():
             print_model_comparison(comparison_result)
 
 
-#   Da qui in poi viene usato il metodo del classificatore. Da modificare se si vuole integrare la valutazione in questo script o in report.ipynb
         # Valutazione del modello con il metodo associato
         print("\nValutazione in corso...")
-        result = classifier.evaluate(
+        from blocks.evaluation import evaluate_model
+        result = evaluate_model(
+            classifier=classifier,
             csv_path=resolved_test_csv,
             label_column=args.label_column,
             output_dir=args.output_dir,
             comparison_result=comparison_result,
         )
 
-        print("\nValutazione completata con successo!")
+        from sklearn.inspection import permutation_importance
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        X, y, _ =classifier._load_labeled_dataset(
+            csv_path=resolved_test_csv,
+            feature_names=classifier.feature_names,
+            label_column="label",
+        )
+        X_scaled = pd.DataFrame(
+            classifier.scaler.transform(X),
+            columns=classifier.feature_names,
+            index=X.index,
+        )
 
-        # Stampo i risultati più importanti
-        print("\n" + "=" * 80)
-        print("METRICHE INCIDENTI")
-        print("=" * 80)
-        print(f"Accuracy:          {result['accuracy']:.4f}")
-        print(f"Balanced Accuracy: {result['balanced_accuracy']:.4f}")
-        print(f"F1-Score:          {result['f1_score']:.4f}")
-        print(f"ROC-AUC:           {result['roc_auc']:.4f}")
-        print("=" * 80 + "\n")
+        model = classifier.model
+        feature_names = classifier.feature_names
+        cm = result["confusion_matrix"]
+        report_dict = result["classification_report"]
+        perm = permutation_importance(
+            classifier.model,
+            X_scaled,
+            y,
+            n_repeats=10,
+            random_state=42,
+            n_jobs=-1,
+        )
+        importance_df = pd.DataFrame({
+            "feature": classifier.feature_names,
+            "importance_mean": perm.importances_mean,
+            "importance_std": perm.importances_std,
+        }).sort_values(by="importance_mean", ascending=False)
+    
+        fig, ax = plt.subplots(figsize=(10, 6))
+        top_10 = importance_df.head(10)
+        ax.barh(range(len(top_10)), top_10['importance_mean'], xerr=top_10['importance_std'])
+        ax.set_yticks(range(len(top_10)))
+        ax.set_yticklabels(top_10['feature'])
+        ax.set_xlabel('Importanza (Permutation Importance)')
+        ax.set_title('Top 10 Feature più Importanti per il Modello')
+        ax.invert_yaxis()
+        plt.tight_layout()
+        plt.show()
+
+        print("\nValutazione completata con successo!")
 
     except Exception as e:
         print(f"\nErrore durante la valutazione:")
