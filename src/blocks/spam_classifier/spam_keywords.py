@@ -5,6 +5,84 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Dict, Iterable, Pattern, Sequence, Set
 
+DELIVERY_BRANDS: Set[str] = {
+    "sda", "bartolini", "brt", "dpd", "poste delivery",
+    "mondial relay", "parcel", "tracking number",
+    "punto di ritiro", "indirizzo incompleto",
+    "consegna fallita", "tentata consegna",
+    "ritiro entro", "spese doganali", "oneri doganali",
+}
+
+# lessico banca/pagamenti/phishing economico
+BANK_PAYMENT_TERMS: Set[str] = {
+    "iban", "addebito", "pagamento non autorizzato",
+    "transazione", "movimento", "verifica pagamento",
+    "bonifico istantaneo", "conto corrente", "carta",
+    "carta bloccata", "scadenza carta", "wallet",
+    "saldo disponibile", "rimborso in sospeso",
+}
+
+# verifica identità / kyc / documenti
+IDENTITY_VERIFICATION_TERMS: Set[str] = {
+    "verifica identita", "documento di identita", "conferma documento",
+    "selfie", "riconoscimento", "identificazione", "kyc",
+    "aggiornamento dati", "conferma dati", "dati mancanti",
+    "profilo incompleto",
+}
+
+# spam promo aggressivo / pressione commerciale
+PROMO_PRESSURE_TERMS: Set[str] = {
+    "solo per oggi", "posti limitati", "pezzi limitati",
+    "offerta esclusiva", "prezzo speciale", "fino al",
+    "risparmia", "approfitta ora", "ultimo giorno",
+    "non perdere", "offerta riservata", "accesso immediato",
+}
+
+# ham business / amministrativo / formale
+HAM_BUSINESS_TERMS: Set[str] = {
+    "in allegato", "resto a disposizione", "cordiali saluti",
+    "in riferimento a", "come concordato", "distinti saluti",
+    "pratica", "documentazione", "fattura allegata",
+    "gentile", "spettabile", "ufficio", "fornitore",
+    "cliente", "riunione", "preventivo",
+}
+
+# verbi/frasi di azione cheap, senza NLP
+ACTION_PHRASE_TERMS: Set[str] = {
+    "clicca", "clicca qui", "verifica", "verifica ora",
+    "conferma", "conferma ora", "accedi", "scarica",
+    "attiva", "richiedi", "aggiorna", "scopri",
+}
+
+
+ITALIAN_STOPWORDS_MINI = {
+    "il", "lo", "la", "i", "gli", "le",
+    "un", "uno", "una",
+    "di", "a", "da", "in", "con", "su", "per", "tra", "fra",
+    "e", "o", "ma", "che", "chi", "cui",
+    "mi", "ti", "si", "ci", "vi",
+    "sono", "sei", "è", "siamo", "siete",
+    "ho", "hai", "ha", "abbiamo", "avete",
+    "del", "della", "dello", "dei", "degli", "delle",
+    "al", "allo", "alla", "ai", "agli", "alle",
+    "dal", "dallo", "dalla", "dai", "dagli", "dalle",
+    "nel", "nello", "nella", "nei", "negli", "nelle",
+    "questo", "questa", "questi", "queste",
+    "quello", "quella", "quelli", "quelle",
+    "non", "più", "come", "dove", "quando", "anche",
+    "grazie", "gentile", "salve", "buongiorno",
+}
+
+ITALIAN_COMMON_WORDS = {
+    "pagamento", "ordine", "consegna", "fattura", "cliente", "servizio",
+    "offerta", "spedizione", "verifica", "accesso", "conto", "account",
+    "documento", "messaggio", "richiesta", "conferma", "sicurezza",
+    "codice", "clicca", "aggiorna", "attiva", "confermare", "ricevuto",
+    "numero", "telefono", "indirizzo", "ufficio", "azienda", "supporto",
+}
+
+PROMO_SYMBOLS = {"%", "€", "$", "!"}
+ACCENTED_CHARS = set("àèéìòù")
 
 URGENCY_TERMS: Set[str] = {
     "urgente", "subito", "immediato", "scade", "scadenza", "oggi",
@@ -65,8 +143,13 @@ SPAM_TERMS: Set[str] = set().union(
     SECURITY_TERMS,
     DELIVERY_TERMS,
     BRAND_TERMS,
+    DELIVERY_BRANDS,
+    BANK_PAYMENT_TERMS,
+    IDENTITY_VERIFICATION_TERMS,
+    PROMO_PRESSURE_TERMS,
     UNSUBSCRIBE_TERMS,
     PROMO_CODE_TERMS,
+    ACTION_PHRASE_TERMS,
 )
 
 SUSPICIOUS_TLDS: Set[str] = {
@@ -97,10 +180,11 @@ AMOUNT_RE: Pattern[str] = re.compile(
     r"(?:€\s?\d+[\d.,]*|\d+[\d.,]*\s?€|\b\d+[\d.,]*\s?(?:euro|eur)\b)",
     re.IGNORECASE,
 )
+
 PROMO_CODE_RE: Pattern[str] = re.compile(
-    r"\b(?:codice|coupon|promo(?:code)?|voucher)\s*[:=-]?\s*[A-Z0-9_-]{4,}\b",
-    re.IGNORECASE,
+    r"(?i)\b(?:codice(?:\s+(?:promo|sconto|offerta))?|coupon|promo(?:code)?|voucher)\b\s*[:=-]?\s*(?-i:[A-Z0-9][A-Z0-9_-]{3,})\b"
 )
+
 
 
 @dataclass(frozen=True)
@@ -143,18 +227,20 @@ def normalize_for_matching(text: str) -> str:
     return re.sub(r"\s+", " ", normalized).strip()
 
 
-# conta parole o frasi target
+# --- FIX IMPORTANTE ---
+# usa la stessa normalizzazione sia per il testo sia per i termini,
+# così non perdi match con punteggiatura tipo "INPS:" o "clicca!"
 def count_term_matches(normalized_text: str, terms: Iterable[str]) -> int:
     total = 0
-    padded = f" {normalized_text} "
+    padded = f" {normalize_for_matching(normalized_text)} "
     for term in terms:
-        candidate = f" {normalize_text(term)} "
+        candidate = f" {normalize_for_matching(term)} "
         total += padded.count(candidate)
     return total
 
 # restituisce un oggetto con i conteggi per ogni keyword
 def keyword_bundle(text: str) -> KeywordBundle:
-    normalized = normalize_text(text)
+    normalized = normalize_for_matching(text)
     return KeywordBundle(
         spam_keywords=count_term_matches(normalized, SPAM_TERMS),
         urgency_keywords=count_term_matches(normalized, URGENCY_TERMS),
@@ -202,13 +288,51 @@ def count_shortener_urls(urls: Iterable[str]) -> int:
             total += 1
     return total
 
+# estrae il dominio host da una URL in modo leggero
+def extract_domain(url: str) -> str:
+    cleaned = normalize_url(url).lower()
+    cleaned = re.sub(r"^https?://", "", cleaned)
+    cleaned = re.sub(r"^www\.", "", cleaned)
+    return cleaned.split("/", 1)[0].split(":", 1)[0]
+
+# token tutti maiuscoli e abbastanza lunghi da essere informativi
+def count_uppercase_tokens(text: str) -> int:
+    total = 0
+    for m in WORD_RE.finditer(text):
+        tok = m.group(0)
+        letters = [c for c in tok if c.isalpha()]
+        if len(letters) >= 2 and tok.upper() == tok and tok.lower() != tok:
+            total += 1
+    return total
+
+# righe molto corte: tipiche di CTA, blocchi promozionali o testo frammentato
+def count_short_lines(text: str, max_len: int = 40) -> int:
+    return sum(1 for line in text.splitlines() if line.strip() and len(line.strip()) <= max_len)
+
+# token molto corti spesso usati in testi spezzati o rumorosi
+# ignora parole di una sola lettera per non penalizzare troppo l'italiano
+def count_short_tokens(text: str, max_len: int = 2) -> int:
+    total = 0
+    for m in WORD_RE.finditer(text):
+        tok = m.group(0)
+        if tok.isalnum() and 2 <= len(tok) <= max_len:
+            total += 1
+    return total
+
+ACTION_PATTERN_RE: Pattern[str] = re.compile(
+    r"\b(?:clicca(?:\s+qui)?|verifica|conferma|accedi|sblocca|aggiorna|attiva|firma\s+online|richiedi)\b",
+    re.IGNORECASE,
+)
+
+PROMO_SYMBOL_RE: Pattern[str] = re.compile(r"[%€$!]")
+
 # frasi in cui ci sono sia URL sia CTA (clicca, accedi, veierfica)
 def count_cta_url_cooccurrence(text: str) -> int:
     total = 0
     for chunk in re.split(r"[\n.!?]+", text):
         if not chunk.strip():
             continue
-        normalized = normalize_text(chunk)
+        normalized = normalize_for_matching(chunk)
         if URL_RE.search(chunk) and count_term_matches(normalized, CTA_TERMS) > 0:
             total += 1
     return total
@@ -219,22 +343,94 @@ def count_brand_url_cooccurrence(text: str) -> int:
     for chunk in re.split(r"[\n.!?]+", text):
         if not chunk.strip():
             continue
-        normalized = normalize_text(chunk)
+        normalized = normalize_for_matching(chunk)
         if URL_RE.search(chunk) and count_term_matches(normalized, BRAND_TERMS) > 0:
             total += 1
     return total
 
-# frasi in cui ci sono sia URL sia CTA (clicca, accedi, veierfica)
+# combo leggere ma molto mirate al caso spam
+def count_urgency_cta_url_combo(text: str) -> int:
+    total = 0
+    for chunk in re.split(r"[\n.!?]+", text):
+        if not chunk.strip():
+            continue
+        normalized = normalize_for_matching(chunk)
+        if (
+            URL_RE.search(chunk)
+            and count_term_matches(normalized, URGENCY_TERMS) > 0
+            and count_term_matches(normalized, CTA_TERMS) > 0
+        ):
+            total += 1
+    return total
+
+def count_money_cta_combo(text: str) -> int:
+    total = 0
+    for chunk in re.split(r"[\n.!?]+", text):
+        if not chunk.strip():
+            continue
+        normalized = normalize_for_matching(chunk)
+        has_money = count_term_matches(normalized, MONEY_TERMS) > 0 or regex_count(AMOUNT_RE, chunk) > 0
+        has_cta = count_term_matches(normalized, CTA_TERMS) > 0
+        if has_money and has_cta:
+            total += 1
+    return total
+
+# conta i match del lessico business/ham
+def count_ham_business_terms(text: str) -> int:
+    normalized = normalize_for_matching(text)
+    return count_term_matches(normalized, HAM_BUSINESS_TERMS)
+
+
+# conta i match di frasi/verbi di azione
+def count_action_phrases(text: str) -> int:
+    normalized = normalize_for_matching(text)
+    return count_term_matches(normalized, ACTION_PHRASE_TERMS)
+
+
+# conta simboli promo/pressione come %, €, $, !
+def count_promo_symbols(text: str) -> int:
+    return sum(text.count(sym) for sym in PROMO_SYMBOLS)
+
+
+# conta token completamente in maiuscolo (almeno 2 caratteri)
+def count_uppercase_tokens(text: str) -> int:
+    total = 0
+    for m in WORD_RE.finditer(text):
+        token = m.group(0)
+        if len(token) >= 2 and token.isupper():
+            total += 1
+    return total
+
+
+# conta sequenze numeriche lunghe tipo tracking, codici, riferimenti
+def count_digit_runs(text: str) -> int:
+    return len(re.findall(r"\b\d{4,}\b", text))
+
+# pattern veloci e poco costosi per la parte spam
 def quick_pattern_counts(text: str) -> Dict[str, int]:
     urls = extract_urls(text)
+    domains = [extract_domain(u) for u in urls if extract_domain(u)]
     return {
         "url_count": len(urls),
         "unique_url_count": len(set(u.lower() for u in urls)),
+        "unique_domain_count": len(set(domains)),
         "email_count": regex_count(EMAIL_RE, text),
         "amount_pattern_count": regex_count(AMOUNT_RE, text),
         "promo_code_pattern_count": regex_count(PROMO_CODE_RE, text),
+        "action_phrase_count": regex_count(ACTION_PATTERN_RE, text),
+        "promo_symbol_count": regex_count(PROMO_SYMBOL_RE, text),
+        "uppercase_token_count": count_uppercase_tokens(text),
+        "short_line_count": count_short_lines(text),
+        "short_token_count": count_short_tokens(text),
         "suspicious_tld_count": count_suspicious_tlds(text),
         "shortener_url_count": count_shortener_urls(urls),
         "cta_plus_url_score": count_cta_url_cooccurrence(text),
         "brand_plus_link_score": count_brand_url_cooccurrence(text),
+        "urgency_cta_url_combo": count_urgency_cta_url_combo(text),
+        "money_cta_combo": count_money_cta_combo(text),
+         "ham_business_hits": count_ham_business_terms(text),
+        "action_phrase_count": count_action_phrases(text),
+        "promo_symbol_count": count_promo_symbols(text),
+        "uppercase_token_count": count_uppercase_tokens(text),
+        "digit_run_count": count_digit_runs(text),
     }

@@ -29,8 +29,23 @@ INV_LABEL_MAP = {0: "ham", 1: "spam"}
 
 LABEL_COLUMNS = ["spam_target_label", "target_label"]
 
+EXCLUDED_TRAINING_FEATURES = {
+    "doc_id",
+    "target_label",
+    "spam_target_label",
+    # - newline_count: sempre 0 perché i testi arrivano già su una riga
+    # - lang_is_ita: sempre 1 nel dataset spam italiano
+    # - unsubscribe_keyword_hits: sempre 0 nel dataset attuale
+     # feature morte o costanti nel dataset attuale
+    "brand_plus_link_score",
+    "short_line_count",          # se esiste nel tuo ramo locale
+    "newline_count",
+    "lang_is_ita",
+    "unsubscribe_keyword_hits",
+}
+
 DEFAULT_FEATURE_NAMES: List[str] = [
-    c for c in FEATURE_COLUMNS if c not in {"doc_id", "target_label", "spam_target_label"}
+    c for c in FEATURE_COLUMNS if c not in EXCLUDED_TRAINING_FEATURES
 ]
 
 
@@ -131,14 +146,21 @@ class SpamClassifier(PipelineStep):
     #serve per rimuovere features non utili al training o che renderebbero troppo facile il training
     @staticmethod
     def _drop_bad_features(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
+        # --- rimuove feature costanti ---
         constant_cols = [c for c in X.columns if X[c].nunique(dropna=False) <= 1]
+
+        # --- segnala feature quasi costanti ---
         near_constant_cols = []
         for c in X.columns:
             vc = X[c].value_counts(normalize=True, dropna=False)
             if not vc.empty and vc.iloc[0] >= 0.995:
                 near_constant_cols.append(c)
+
+        # --- nel dataset attuale rimuovo solo le costanti vere,
+        # le quasi costanti le segnalo ma non le butto in automatico ---
         remove_cols = sorted(set(constant_cols))
         keep = [c for c in X.columns if c not in remove_cols]
+
         return X[keep].copy(), remove_cols, sorted(set(near_constant_cols) - set(remove_cols))
 
     #allena il modello sui dati estratti dal csv.
