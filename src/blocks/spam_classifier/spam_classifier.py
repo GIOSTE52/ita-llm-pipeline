@@ -81,12 +81,13 @@ class SpamClassifier(PipelineStep):
             return None
     
     def _predict_from_features(self, feats: List[float]) -> Tuple[str, float]:
-        X = np.array(feats, dtype=float).reshape(1, -1)
+        X = pd.DataFrame([feats], columns=self.feature_names)
         Xs = self.scaler.transform(X)
+        Xs = pd.DataFrame(Xs, columns=self.feature_names)
         proba = self.model.predict_proba(Xs)[0]
         spam_score = float(proba[1])
         pred_label = "spam" if spam_score >= self.threshold else "ham"
-        return pred_label, spam_score
+        return pred_label, spam_score 
 
     def predict_doc(self, doc) -> Tuple[str, float]:
         feats = self._extract_features(doc)
@@ -277,13 +278,12 @@ class SpamClassifier(PipelineStep):
         joblib.dump(artifact, output_path)
         print(f"[OK] Modello salvato in: {output_path}")
 
-    class SpamFilter(BaseFilter):
-        """ 
-        Filtro spam vero e proprio.
-
-        - I documenti ham continuano nella pipeline
-        - I documenti spam vengono scartati e salvati nella cartella rejected
-        """
+class SpamFilter(BaseFilter):
+    """ 
+    Filtro spam vero e proprio.
+    - I documenti ham continuano nella pipeline
+    - I documenti spam vengono scartati e salvati nella cartella rejected
+    """
         
     name = "Spam Filter"
 
