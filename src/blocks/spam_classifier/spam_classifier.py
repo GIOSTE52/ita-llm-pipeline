@@ -33,20 +33,30 @@ EXCLUDED_TRAINING_FEATURES = {
     "doc_id",
     "target_label",
     "spam_target_label",
+    # nel dataset attuale sono risultate costanti o inutilizzabili:
     # - newline_count: sempre 0 perché i testi arrivano già su una riga
     # - lang_is_ita: sempre 1 nel dataset spam italiano
     # - unsubscribe_keyword_hits: sempre 0 nel dataset attuale
-     # feature morte o costanti nel dataset attuale
     "brand_plus_link_score",
-    "short_line_count",          # se esiste nel tuo ramo locale
+    "short_line_count",
     "newline_count",
     "lang_is_ita",
     "unsubscribe_keyword_hits",
+    "currency_symbol_count",
+    "email_density",
+    "email_count_text",
+    "unique_domain_count_text",
+    "promo_code_pattern_count",
+    "brand_keyword_hits",
+
+    
 }
+
 
 DEFAULT_FEATURE_NAMES: List[str] = [
     c for c in FEATURE_COLUMNS if c not in EXCLUDED_TRAINING_FEATURES
 ]
+
 
 
 class SpamClassifier(PipelineStep):
@@ -71,8 +81,8 @@ class SpamClassifier(PipelineStep):
         self.scaler: StandardScaler = artifact["scaler"]
         self._feature_names_train: List[str] = artifact.get("feature_names", DEFAULT_FEATURE_NAMES)
 
-        #se la trashold non è impostata usa come predefinito 0.5
-        saved_threshold = artifact.get("threshold", 0.5)
+        #se la trashold non è impostata usa come predefinito 0.7
+        saved_threshold = artifact.get("threshold", 0.7)
         self.threshold = float(saved_threshold if threshold is None else threshold)
 
         self.feature_names = feature_names or self._feature_names_train
@@ -103,6 +113,7 @@ class SpamClassifier(PipelineStep):
         spam_score = float(proba[1])
         pred_label = "spam" if spam_score >= self.threshold else "ham"
         return pred_label, spam_score 
+
 
     def predict_doc(self, doc) -> Tuple[str, float]:
         feats = self._extract_features(doc)
@@ -149,6 +160,7 @@ class SpamClassifier(PipelineStep):
         # --- rimuove feature costanti ---
         constant_cols = [c for c in X.columns if X[c].nunique(dropna=False) <= 1]
 
+
         # --- segnala feature quasi costanti ---
         near_constant_cols = []
         for c in X.columns:
@@ -156,12 +168,14 @@ class SpamClassifier(PipelineStep):
             if not vc.empty and vc.iloc[0] >= 0.995:
                 near_constant_cols.append(c)
 
+
         # --- nel dataset attuale rimuovo solo le costanti vere,
         # le quasi costanti le segnalo ma non le butto in automatico ---
         remove_cols = sorted(set(constant_cols))
         keep = [c for c in X.columns if c not in remove_cols]
 
-        return X[keep].copy(), remove_cols, sorted(set(near_constant_cols) - set(remove_cols))
+
+        return X[keep].copy(), remove_cols, sorted(set(near_constant_cols) - set(remove_cols)) 
 
     #allena il modello sui dati estratti dal csv.
     @staticmethod
