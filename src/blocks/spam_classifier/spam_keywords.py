@@ -97,9 +97,14 @@ MONEY_TERMS: Set[str] = {
 }
 
 CTA_TERMS: Set[str] = {
-    "clicca qui", "clicca", "apri", "scopri di più", "conferma ora",
-    "verifica ora", "registrati", "accedi", "rispondi", "compila",
-    "scarica", "richiedi", "attiva",
+    "clicca", "clicca qui", "clicca sul link", "premi qui",
+   "accedi", "accedi ora", "verifica", "verifica ora",  "verifica subito",
+   "conferma", "conferma ora", "conferma subito", "aggiorna",
+   "aggiorna ora", "scarica", "scarica ora", "attiva",
+   "attiva ora", "richiedi", "richiedi ora", "completa",
+   "completa ora", "procedi", "procedi ora", "continua",
+   "continua qui", "visualizza", "visualizza qui", "consulta",
+   "scopri", "scopri ora",
 }
 
 ACCOUNT_TERMS: Set[str] = {
@@ -111,12 +116,20 @@ ACCOUNT_TERMS: Set[str] = {
 SECURITY_TERMS: Set[str] = {
     "sicurezza", "alert", "allerta", "anomalo", "sospetto",
     "tentativo di accesso", "attività insolita", "blocco",
-    "sospensione", "violazione",
+    "sospensione", "violazione", "accesso non autorizzato",
+    "attivita sospetta", "verifica di sicurezza",
+    "account compromesso", "anomalia", "blocco preventivo",
+    "misura di sicurezza", "conferma identita", "protezione account",
 }
 
 DELIVERY_TERMS: Set[str] = {
-    "spedizione", "consegna", "corriere", "pacco", "giacenza",
-    "tracking", "ordine", "ritiro", "dogana", "indirizzo errato",
+   "consegna", "spedizione", "pacco", "corriere",
+   "tracking", "tracciamento", "tentata consegna",
+   "consegna fallita", "indirizzo errato", "indirizzo incompleto",
+   "ritiro", "ritiro entro", "punto di ritiro",
+   "giacenza", "fermo deposito", "spese di consegna",
+   "spese doganali", "oneri doganali", "spedizione bloccata",
+   "ordine in arrivo", "ordine sospeso",
 }
 
 BRAND_TERMS: Set[str] = {
