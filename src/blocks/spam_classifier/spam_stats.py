@@ -17,8 +17,7 @@ from .spam_keywords import (
     ITALIAN_STOPWORDS_MINI,
     ITALIAN_COMMON_WORDS,
     ACCENTED_CHARS,
-    token_count,
-    unique_token_count,
+    extract_tokens,
 )
 
 
@@ -128,7 +127,8 @@ def _safe_div(a: float, b: float) -> float:
 
 
 def _tokenize_lang_words(text: str) -> list[str]:
-    return re.findall(r"\b[\wàèéìòùÀÈÉÌÒÙ']+\b", text.lower(), flags=re.UNICODE)
+    return extract_tokens(text, lowercase=True) 
+
 
 
 
@@ -244,12 +244,17 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
 
 
     basic = _basic_char_stats(text)
-    text_tokens = text.split()
-    word_count = token_count(text)
-    unique_word_count = unique_token_count(text)
+
+    tokens = extract_tokens(text)
+    tokens_lower = [tok.lower() for tok in tokens]
+
+
+    word_count = len(tokens)
+    unique_word_count = len(set(tokens_lower))
     avg_word_length = (
-        sum(len(tok) for tok in text_tokens) / len(text_tokens) if text_tokens else 0.0
+        sum(len(tok) for tok in tokens) / word_count if word_count else 0.0
     )
+
 
 
     kw = keyword_bundle(text)
@@ -338,6 +343,8 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "promo_keyword_hits": float(kw.promo_code_keywords),
         "lang_score": lang_score,
         "lang_is_ita": 1.0 if lang in {"ita", "it", "italian"} else 0.0,
+        
+        
     }
     return features
 
@@ -445,7 +452,7 @@ class SpamFeatureCsvWriter(PipelineStep):
         write_header = not file_exists or os.path.getsize(csv_path) == 0
 
 
-        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        with open(csv_path, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=FEATURE_COLUMNS)
 
 

@@ -206,6 +206,7 @@ URL_SHORTENERS: Set[str] = {
 
 
 WORD_RE: Pattern[str] = re.compile(r"\b[\wÀ-ÖØ-öø-ÿ'-]+\b", re.UNICODE)
+
 # - https:/, www., domini nudi tipo .win o name.com/path
 URL_RE: Pattern[str] = re.compile(r"""
     (?:
@@ -227,11 +228,6 @@ AMOUNT_RE: Pattern[str] = re.compile(
 PROMO_CODE_RE: Pattern[str] = re.compile(
     r"(?i)\b(?:codice(?:\s+(?:promo|sconto|offerta))?|coupon|promo(?:code)?|voucher)\b\s*[:=-]?\s*(?-i:[A-Z0-9][A-Z0-9_-]{3,})\b"
 )
-
-
-
-
-
 
 @dataclass(frozen=True)
 class KeywordBundle:
@@ -315,28 +311,37 @@ def regex_count(pattern: Pattern[str], text: str) -> int:
 
 # estrae url
 def extract_urls(text: str) -> Sequence[str]:
-    return URL_RE.findall(text)
+    if not text:
+        return []
+    text_wo_emails = EMAIL_RE.sub(" ", text)
+    return [normalize_url(u) for u in URL_RE.findall(text_wo_emails)] 
+
 
 
 # estrae email
 def extract_emails(text: str) -> Sequence[str]:
     return EMAIL_RE.findall(text)
 
-
-# conto dei token (parole)
-def token_count(text: str) -> int:
-    return sum(1 for _ in WORD_RE.finditer(text))
-
-
-# conto dei token unici
-def unique_token_count(text: str) -> int:
-    return len({m.group(0).lower() for m in WORD_RE.finditer(text)})
+def extract_tokens(text: str, lowercase: bool = False) -> list[str]:
+    if not text:
+        return []
+    tokens = [m.group(0) for m in WORD_RE.finditer(text)]
+    if lowercase:
+        return [tok.lower() for tok in tokens]
+    return tokens
 
 
 # conto dei tld sospetti
-def count_suspicious_tlds(text: str) -> int:
-    lowered = text.lower()
-    return sum(lowered.count(tld) for tld in SUSPICIOUS_TLDS)
+def count_suspicious_tlds(urls: Iterable[str]) -> int:
+    total = 0
+    for url in urls:
+        domain = extract_domain(url)
+        if domain and any(domain.endswith(tld) for tld in SUSPICIOUS_TLDS):
+            total += 1
+    return total
+
+
+
 
 
 # conta url shortner
@@ -377,12 +382,10 @@ def count_short_lines(text: str, max_len: int = 40) -> int:
 # ignora parole di una sola lettera per non penalizzare troppo l'italiano
 def count_short_tokens(text: str, max_len: int = 2) -> int:
     total = 0
-    for m in WORD_RE.finditer(text):
-        tok = m.group(0)
+    for tok in extract_tokens(text):
         if tok.isalnum() and 2 <= len(tok) <= max_len:
             total += 1
     return total
-
 
 ACTION_PATTERN_RE: Pattern[str] = re.compile(
     r"\b(?:clicca(?:\s+qui)?|verifica|conferma|accedi|sblocca|aggiorna|attiva|firma\s+online|richiedi)\b",
@@ -400,9 +403,10 @@ def count_cta_url_cooccurrence(text: str) -> int:
         if not chunk.strip():
             continue
         normalized = normalize_for_matching(chunk)
-        if URL_RE.search(chunk) and count_term_matches(normalized, CTA_TERMS) > 0:
+        if extract_urls(chunk) and count_term_matches(normalized, CTA_TERMS) > 0:
             total += 1
-    return total
+    return total 
+
 
 
 # frasi in cui ci sono sia URL sia brand
@@ -412,9 +416,10 @@ def count_brand_url_cooccurrence(text: str) -> int:
         if not chunk.strip():
             continue
         normalized = normalize_for_matching(chunk)
-        if URL_RE.search(chunk) and count_term_matches(normalized, BRAND_TERMS) > 0:
+        if extract_urls(chunk) and count_term_matches(normalized, BRAND_TERMS) > 0:
             total += 1
-    return total
+    return total 
+
 
 
 # combo leggere ma molto mirate al caso spam
@@ -425,12 +430,13 @@ def count_urgency_cta_url_combo(text: str) -> int:
             continue
         normalized = normalize_for_matching(chunk)
         if (
-            URL_RE.search(chunk)
-            and count_term_matches(normalized, URGENCY_TERMS) > 0
-            and count_term_matches(normalized, CTA_TERMS) > 0
+           extract_urls(chunk)
+           and count_term_matches(normalized, URGENCY_TERMS) > 0
+           and count_term_matches(normalized, CTA_TERMS) > 0
         ):
             total += 1
     return total
+
 
 
 def count_money_cta_combo(text: str) -> int:
@@ -465,21 +471,7 @@ def count_action_phrases(text: str) -> int:
 # conta simboli promo/pressione come %, €, $, !
 def count_promo_symbols(text: str) -> int:
     return sum(text.count(sym) for sym in PROMO_SYMBOLS)
-
-
-
-
-# conta token completamente in maiuscolo (almeno 2 caratteri)
-def count_uppercase_tokens(text: str) -> int:
-    total = 0
-    for m in WORD_RE.finditer(text):
-        token = m.group(0)
-        if len(token) >= 2 and token.isupper():
-            total += 1
-    return total
-
-
-
+    
 
 # conta sequenze numeriche lunghe tipo tracking, codici, riferimenti
 def count_digit_runs(text: str) -> int:
@@ -488,29 +480,46 @@ def count_digit_runs(text: str) -> int:
 
 # pattern veloci e poco costosi per la parte spam
 def quick_pattern_counts(text: str) -> Dict[str, int]:
-    urls = extract_urls(text)
-    domains = [extract_domain(u) for u in urls if extract_domain(u)]
+    emails = list(extract_emails(text))
+    urls = list(extract_urls(text))
+
+
+    domains = []
+    for u in urls:
+        d = extract_domain(u)
+        if d:
+            domains.append(d)
+
+
+    unique_urls = {u.lower() for u in urls}
+    unique_domains = set(domains)
+
+
     return {
         "url_count": len(urls),
-        "unique_url_count": len(set(u.lower() for u in urls)),
-        "unique_domain_count": len(set(domains)),
-        "email_count": regex_count(EMAIL_RE, text),
+        "unique_url_count": len(unique_urls),
+        "unique_domain_count": len(unique_domains),
+        "email_count": len(emails),
         "amount_pattern_count": regex_count(AMOUNT_RE, text),
         "promo_code_pattern_count": regex_count(PROMO_CODE_RE, text),
         "short_line_count": count_short_lines(text),
         "short_token_count": count_short_tokens(text),
-        "suspicious_tld_count": count_suspicious_tlds(text),
+        "suspicious_tld_count": count_suspicious_tlds(urls),
         "shortener_url_count": count_shortener_urls(urls),
         "cta_plus_url_score": count_cta_url_cooccurrence(text),
         "brand_plus_link_score": count_brand_url_cooccurrence(text),
         "urgency_cta_url_combo": count_urgency_cta_url_combo(text),
         "money_cta_combo": count_money_cta_combo(text),
-         "ham_business_hits": count_ham_business_terms(text),
+        "ham_business_hits": count_ham_business_terms(text),
         "action_phrase_count": count_action_phrases(text),
         "promo_symbol_count": count_promo_symbols(text),
         "uppercase_token_count": count_uppercase_tokens(text),
         "digit_run_count": count_digit_runs(text),
-    }
+    } 
+
+
+
+
 
 
 

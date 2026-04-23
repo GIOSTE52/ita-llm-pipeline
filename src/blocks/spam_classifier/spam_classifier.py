@@ -187,7 +187,7 @@ class SpamClassifier(PipelineStep):
         n_estimators: int = 300,
         learning_rate: float = 0.05,
         random_state: int = 42,
-        threshold: float = 0.5,
+        threshold: float = 0.7,
     ) -> dict:
         df = pd.read_csv(csv_path)
 
