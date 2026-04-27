@@ -207,42 +207,12 @@ class DocStatsCsv(DocStats):
 
     # IMPORTANTE: Svuota questo metodo per evitare che DataTrove provi a salvare di nuovo
     def _save_to_csv(self):
+        """
+        Svuotato perché la scrittura avviene riga per riga nel metodo run
+        per ottimizzare l'uso della memoria.
+        """
         pass
 
-    # def run(self, data, rank=0, world_size=1):
-    #     self.all_docs_stats = []
-    #     for doc in data:
-    #         with self.track_time():
-    #             doc_features = self.extract_stats(doc)
-    #             lang_score = doc.metadata.get("language_score")
-    #             if lang_score is None:
-    #                 _, lang_score = self.lid_model.predict(doc)
-                
-    #             row = {
-    #                 "doc_id": doc.id,
-    #                 "label": doc.metadata.get("label", "unknown").lower(),
-    #                 "language_score": lang_score,
-    #                 **doc_features
-    #             }
-    #             self.all_docs_stats.append(row)
-    #             doc.metadata.update(doc_features)
-    #             doc.metadata["language_score"] = lang_score
-    #         yield doc
-        
-    #     if rank == 0:
-    #         self._save_to_csv()
-
-    # def _save_to_csv(self):
-    #     if not self.all_docs_stats: return
-    #     fieldnames = list(self.all_docs_stats[0].keys())
-    #     try:
-    #         with self.output_folder.open(self.csv_filename, "wt") as f:
-    #             writer = csv.DictWriter(f, fieldnames=fieldnames)
-    #             writer.writeheader()
-    #             writer.writerows(self.all_docs_stats)
-    #         logger.info(f"CSV salvato correttamente.")
-    #     except Exception as e:
-    #         logger.error(f"Errore salvataggio: {e}")
 
     def _get_empty_stats(self) -> dict:
         # Metodo di fallback per doc vuoti (ritorna 0 per tutte le chiavi)
