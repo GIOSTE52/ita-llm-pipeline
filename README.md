@@ -92,9 +92,23 @@ Variabili e valori principali:
 | `MODEL_PATH` | cartella con i modelli | `ROOT_DIR/models` |
 | `MAX_WORKERS` | numero worker DataTrove | default `cpu_count() - 2`, minimo `1` |
 
+## Gestione Dataset (Interno vs Esterno)
+- `config_loader.get_config()` usa come pattern input fisso `INPUT_SUB_PATTERN = train/*.jsonl`, bisogna modificarlo manualmente per cambiare la scelta del 
+### 1. Utilizzo Dataset della Repository (Default)
+Per utilizzare i file contenuti in `data/train/*.jsonl`:
+- Nel file `src/config_loader.py`, imposta: `USE_EXTERNAL_DATA = False`.
+- (Opzionale) Nel `docker-compose.yml`, puoi lasciare commentata la riga del volume esterno.
+
+### 2. Utilizzo Dataset Esterno (Locale)
+Per puntare a una cartella esterna (es. un disco rigido o la Scrivania) senza spostare i file:
+1. **Docker Compose**: Decommenta o aggiungi la riga del volume nel servizio `pipeline`:
+   ```yaml
+   volumes:
+     - /tuo/percorso/sul/pc:/app/external_data:ro
+
 Note operative:
 
-- `config_loader.get_config()` usa come pattern input fisso `INPUT_SUB_PATTERN = train/*.jsonl`, bisogna modificarlo manualmente per cambiare la scelta del dataset in input.
+dataset in input.
 - `NUM_TASKS` viene calcolato contando i file che matchano `DATA_DIR/INPUT_SUB_PATTERN`.
 - `--tasks` viene parsato dalla CLI e sovrascrive `NUM_TASKS` se specificato.
 
