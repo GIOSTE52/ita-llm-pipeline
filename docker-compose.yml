@@ -6,6 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
+      #Dati in input esterni
+      - ${EXTERNAL_DATASET_PATH:-./data}:/app/external_data:ro
       # Dati in input (read-only)
       - ./data:/app/data:ro
       # Output e logs (read-write)
@@ -25,6 +27,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
+      - ${EXTERNAL_DATASET_PATH:-./data}:/app/external_data:ro
       - ./tests:/app/tests:ro
       - ./data:/app/data:ro
       - ./output:/app/output

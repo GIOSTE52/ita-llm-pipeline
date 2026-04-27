@@ -34,9 +34,19 @@ def get_config():
     # 1. Base Directories
     ROOT_DIR = os.environ.get("ROOT_DIR", args.root_dir)
     OUTPUT_DIR = os.environ.get("OUTPUT_DIR", args.output_dir)
-    DATA_DIR = os.environ.get("DATA_DIR", os.path.join(ROOT_DIR, "data"))
-    #modificare qui per cambiare la cartella del dataset
-    INPUT_SUB_PATTERN = "train/*.jsonl"
+
+    # 1. Controlliamo se è stato montato un dataset esterno
+    external_path = "/app/external_data"
+    
+    # Se la cartella esterna esiste ed è diversa dalla root locale
+    if os.path.exists(external_path) and len(os.listdir(external_path)) > 0:
+        DATA_DIR = external_path
+        INPUT_SUB_PATTERN = "*.jsonl" # <--- Niente sottocartelle per i dati esterni!
+        print(f"Modalità: DATASET ESTERNO")
+    else:
+        DATA_DIR = os.path.join(args.root_dir, "data")
+        INPUT_SUB_PATTERN = "train/*.jsonl" # <--- Sottocartella per la repo
+        print(f"Modalità: REPOSITORY")
     
     # --- LOGICA DINAMICA TASK ---
     full_search_path = os.path.join(DATA_DIR, INPUT_SUB_PATTERN)
