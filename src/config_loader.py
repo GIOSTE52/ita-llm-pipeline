@@ -76,9 +76,9 @@ def get_config():
             continue
         os.makedirs(os.path.dirname(path) if key == "MODEL_PATH" else path, exist_ok=True)
             
-    print(f"🚀 Pipeline: {config['MAX_WORKERS']} workers | {config['NUM_TASKS']} tasks.")
+    print(f"Pipeline: {config['MAX_WORKERS']} workers | {config['NUM_TASKS']} tasks.")
     # Verifica di sicurezza: il modello esiste?
     if not os.path.exists(config["MODEL_PATH"]):
-        print(f"⚠️ [WARNING] Modello non trovato in: {config['MODEL_PATH']}")
+        print(f"[WARNING] Modello non trovato in: {config['MODEL_PATH']}")
         
     return config

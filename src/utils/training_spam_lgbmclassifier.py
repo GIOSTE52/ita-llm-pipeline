@@ -38,7 +38,7 @@ def main() -> None:
     
     args = parser.parse_args()
 
-    print(f"🚀 Avvio training su: {args.csv_path}")
+    print(f"Avvio training su: {args.csv_path}")
     
     try:
         # Addestramento
@@ -52,12 +52,12 @@ def main() -> None:
         
         # Salvataggio
         SpamClassifier.save_model(result, args.model_path)
-        print(f"✅ Modello salvato con successo in: {args.model_path}")
+        print(f"Modello salvato con successo in: {args.model_path}")
         
     except FileNotFoundError:
-        print(f"❌ ERRORE: Non trovo il file CSV in {args.csv_path}")
+        print(f"ERRORE: Non trovo il file CSV in {args.csv_path}")
     except Exception as e:
-        print(f"❌ ERRORE durante il training: {e}")
+        print(f"ERRORE durante il training: {e}")
 
 if __name__ == "__main__":
     main()

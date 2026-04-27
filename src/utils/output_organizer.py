@@ -45,4 +45,4 @@ def output_classification(rejected_dir, output_base_dir):
 
     f_good.close()
     f_bad.close()
-    print("✅ Smistamento eseguito con successo guardando i metadati.")
+    print("Smistamento eseguito con successo guardando i metadati.")

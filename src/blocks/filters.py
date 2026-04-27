@@ -39,7 +39,7 @@ class CustomItalianFilter(BaseFilter):
     """
     def __init__(self, output_folder: str, filename: str):
         super().__init__()
-        self.name = "🇮🇹 Custom Italian Filter"
+        self.name = "Custom Italian Filter"
         self.exclusion_writer = JsonlWriter(
             output_folder=output_folder,
             output_filename=filename,
@@ -85,7 +85,7 @@ class ItalianClassification(BaseFilter):
             )
 
         super().__init__(exclusion_writer=exclusion_writer, batch_size=batch_size)
-        self.name = "🇮🇹 Italian Classification"
+        self.name = "Italian Classification"
         self.classifier = QualityClassifier(
             model_path= model_path,
             feature_names= feature_names,

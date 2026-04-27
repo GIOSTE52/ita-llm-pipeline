@@ -50,7 +50,7 @@ ITALIAN_STOPWORDS = {
 }
 
 class DocStatsCsv(DocStats):
-    name = "🇮🇹 Italian Advanced Features CSV"
+    name = "Italian Advanced Features CSV"
 
     def __init__(
         self,
@@ -203,7 +203,7 @@ class DocStatsCsv(DocStats):
                 
                 yield doc
         
-        logger.info(f"✅ Worker {rank} ha finito di scrivere il suo file parziale.")
+        logger.info(f"Worker {rank} ha finito di scrivere il suo file parziale.")
 
     # IMPORTANTE: Svuota questo metodo per evitare che DataTrove provi a salvare di nuovo
     def _save_to_csv(self):
@@ -240,9 +240,9 @@ class DocStatsCsv(DocStats):
     #             writer = csv.DictWriter(f, fieldnames=fieldnames)
     #             writer.writeheader()
     #             writer.writerows(self.all_docs_stats)
-    #         logger.info(f"✅ CSV salvato correttamente.")
+    #         logger.info(f"CSV salvato correttamente.")
     #     except Exception as e:
-    #         logger.error(f"❌ Errore salvataggio: {e}")
+    #         logger.error(f"Errore salvataggio: {e}")
 
     def _get_empty_stats(self) -> dict:
         # Metodo di fallback per doc vuoti (ritorna 0 per tutte le chiavi)
