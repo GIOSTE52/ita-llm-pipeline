@@ -16,11 +16,11 @@ def fix_rp_dataset():
     temp_file = "rpDataset_temp.jsonl"
     
     if not os.path.exists(input_file):
-        print(f"❌ Errore: Il file {input_file} non è in questa cartella!")
+        print(f"Errore: Il file {input_file} non è in questa cartella!")
         return
 
     count = 0
-    print(f"🔄 Inizio elaborazione di {input_file}...")
+    print(f"Inizio elaborazione di {input_file}...")
 
     with open(input_file, 'r', encoding='utf-8') as f_in, \
          open(temp_file, 'w', encoding='utf-8') as f_out:
@@ -59,12 +59,12 @@ def fix_rp_dataset():
                     print(f"--- Processate {count} righe...", end="\r")
 
             except Exception as e:
-                print(f"\n⚠️ Errore alla riga {count+1}: {e}")
+                print(f"\nErrore alla riga {count+1}: {e}")
 
     # Sostituiamo l'originale con il file temporaneo
     os.replace(temp_file, input_file)
-    print(f"\n✅ Completato! Modificate {count} righe.")
-    print(f"📂 Il file {input_file} ora ha le chiavi 'text' e 'label' (good/bad).")
+    print(f"\nCompletato! Modificate {count} righe.")
+    print(f"Il file {input_file} ora ha le chiavi 'text' e 'label' (good/bad).")
 
 if __name__ == "__main__":
     fix_rp_dataset()

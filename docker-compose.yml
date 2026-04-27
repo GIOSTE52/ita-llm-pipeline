@@ -6,6 +6,9 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
+      #decommenta se vuoi usare dataset esterno
+      - /home/silvio/Scrivania/test_chunks:/app/external_data:ro
+
       # Dati in input (read-only)
       - ./data:/app/data:ro
       # Output e logs (read-write)
