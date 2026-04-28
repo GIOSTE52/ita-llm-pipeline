@@ -35,6 +35,15 @@ def main() -> None:
         default=None,
         help="Colonna label (automatico se None)",
     )
+    parser.add_argument(
+        "--errors-dir",
+        type=str,
+        default=os.path.join("output", "debug", "spam"),
+        help="Cartella dove salvare predizioni ed errori del test set",
+    )
+
+
+
     
     args = parser.parse_args()
 
@@ -45,7 +54,11 @@ def main() -> None:
         result = SpamClassifier.train_from_csv(
             csv_path=args.csv_path,
             label_column=args.label_column,
+            errors_output_dir=args.errors_dir,
         )
+
+
+
         
         # Creazione cartella models se manca
         os.makedirs(os.path.dirname(args.model_path), exist_ok=True)

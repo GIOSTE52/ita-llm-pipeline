@@ -30,13 +30,31 @@ INV_LABEL_MAP = {0: "ham", 1: "spam"}
 LABEL_COLUMNS = ["spam_target_label", "target_label"]
 
 EXCLUDED_TRAINING_FEATURES = {
+    # identificativi / label
     "doc_id",
+    "id",
     "target_label",
     "spam_target_label",
-    # nel dataset attuale sono risultate costanti o inutilizzabili:
-    # - newline_count: sempre 0 perché i testi arrivano già su una riga
-    # - lang_is_ita: sempre 1 nel dataset spam italiano
-    # - unsubscribe_keyword_hits: sempre 0 nel dataset attuale
+    "spam_label",
+    "spam_label_gold",
+    "spam_gold_label",
+    "label",
+
+    # debug / testo grezzo: NON devono mai entrare nel training
+    "text",
+    "raw_text",
+    "text_preview",
+    "subject",
+    "body",
+    "content",
+
+    # metadata di annotazione: utili per analisi, non per training
+    "spam_subtype",
+    "annotation_source",
+    "annotator",
+    "annotation_version",
+
+    # feature escluse perché costanti/inutili nel dataset attuale
     "brand_plus_link_score",
     "short_line_count",
     "newline_count",
@@ -48,16 +66,16 @@ EXCLUDED_TRAINING_FEATURES = {
     "unique_domain_count_text",
     "promo_code_pattern_count",
     "brand_keyword_hits",
-
+    "symbol_pressure_count",
+    "action_pharse_count",
+    "char_count",
+    "has_link_and_cta",
     
 }
-
 
 DEFAULT_FEATURE_NAMES: List[str] = [
     c for c in FEATURE_COLUMNS if c not in EXCLUDED_TRAINING_FEATURES
 ]
-
-
 
 class SpamClassifier(PipelineStep):
     """
@@ -94,6 +112,7 @@ class SpamClassifier(PipelineStep):
             self.threshold,
         )
 
+
     def _extract_features(self, doc) -> Optional[List[float]]:
         values = []
         metadata = getattr(doc, "metadata", {}) or {}
@@ -104,7 +123,8 @@ class SpamClassifier(PipelineStep):
         except Exception as e:
             logger.warning("Feature mancanti/non numeriche per doc %s: %s", getattr(doc, "id", ""), e)
             return None
-    
+
+
     def _predict_from_features(self, feats: List[float]) -> Tuple[str, float]:
         X = pd.DataFrame([feats], columns=self.feature_names)
         Xs = self.scaler.transform(X)
@@ -121,18 +141,7 @@ class SpamClassifier(PipelineStep):
             return "ham", 0.0
         return self._predict_from_features(feats)
     
-    def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
-        for doc in data:
-            pred_label, spam_score = self.predict_doc(doc)
-
-            if getattr(doc, "metadata", None) is None:
-                doc.metadata = {}
-
-            doc.metadata["spam_pred_label"] = pred_label
-            doc.metadata["spam_pred_score"] = round(float(spam_score), 6)
-
-            yield doc
-
+    
     @staticmethod
     def _resolve_label_column(df: pd.DataFrame, label_column: Optional[str] = None) -> str:
         if label_column:
@@ -146,6 +155,7 @@ class SpamClassifier(PipelineStep):
         
         raise ValueError("Nessuna colonna label valida trovata nel CSV (spam_target_label/target_label)")
 
+
     @staticmethod
     def _resolve_feature_names(df: pd.DataFrame, feature_names: Optional[List[str]] = None) -> List[str]:
         requested = feature_names or DEFAULT_FEATURE_NAMES
@@ -154,12 +164,12 @@ class SpamClassifier(PipelineStep):
             raise ValueError("Nessuna feature valida trovata nel CSV")
         return available
     
+
     #serve per rimuovere features non utili al training o che renderebbero troppo facile il training
     @staticmethod
     def _drop_bad_features(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
         # --- rimuove feature costanti ---
         constant_cols = [c for c in X.columns if X[c].nunique(dropna=False) <= 1]
-
 
         # --- segnala feature quasi costanti ---
         near_constant_cols = []
@@ -168,14 +178,13 @@ class SpamClassifier(PipelineStep):
             if not vc.empty and vc.iloc[0] >= 0.995:
                 near_constant_cols.append(c)
 
-
         # --- nel dataset attuale rimuovo solo le costanti vere,
         # le quasi costanti le segnalo ma non le butto in automatico ---
         remove_cols = sorted(set(constant_cols))
         keep = [c for c in X.columns if c not in remove_cols]
 
-
         return X[keep].copy(), remove_cols, sorted(set(near_constant_cols) - set(remove_cols)) 
+
 
     #allena il modello sui dati estratti dal csv.
     @staticmethod
@@ -183,11 +192,13 @@ class SpamClassifier(PipelineStep):
         csv_path: str,
         feature_names: Optional[List[str]] = None,
         label_column: Optional[str] = None,
-        test_size: float = 0.2,
+        test_size: float = 0.5,
         n_estimators: int = 300,
         learning_rate: float = 0.05,
         random_state: int = 42,
-        threshold: float = 0.7,
+        threshold: float = 0.5,
+        errors_output_dir: Optional[str] = None, 
+
     ) -> dict:
         df = pd.read_csv(csv_path)
 
@@ -196,6 +207,32 @@ class SpamClassifier(PipelineStep):
 
         label_column = SpamClassifier._resolve_label_column(df, label_column)
         feat_names = SpamClassifier._resolve_feature_names(df, feature_names)
+        forbidden_features = {
+            "text",
+            "raw_text",
+            "text_preview",
+            "subject",
+            "body",
+            "content",
+            "label",
+            "target_label",
+            "spam_target_label",
+            "spam_label",
+            "spam_label_gold",
+            "spam_subtype",
+            "annotation_source",
+            "annotator",
+            "annotation_version",
+        }
+
+        bad_used = [c for c in feat_names if c in forbidden_features]
+
+        if bad_used:
+            raise ValueError(
+                "ERRORE: colonne non ammesse nel training: "
+                + ", ".join(bad_used)
+                + ". Toglile da FEATURE_COLUMNS o aggiungile solo a DEBUG_COLUMNS."
+            )
 
         df[label_column] = df[label_column].astype(str).str.strip().str.lower()
         df = df[df[label_column].isin(["ham", "spam"])].copy()
@@ -213,9 +250,10 @@ class SpamClassifier(PipelineStep):
         if len(feat_names) < 2:
             raise ValueError("Dopo la pulizia restano troppo poche feature")
 
-        X_train, X_test, y_train, y_test = train_test_split(
+        X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split( 
             X,
             y,
+            df.index,
             test_size=test_size,
             random_state=random_state,
             stratify=y,
@@ -243,7 +281,76 @@ class SpamClassifier(PipelineStep):
         
         y_prob = model.predict_proba(X_test_s)[:, 1]
         y_pred = (y_prob >= threshold).astype(int)
-        
+        test_rows = df.loc[idx_test].copy()
+
+        test_rows["true_label"] = y_test.map(INV_LABEL_MAP).values
+        test_rows["pred_label"] = [INV_LABEL_MAP[int(v)] for v in y_pred]
+        test_rows["spam_probability"] = y_prob
+        test_rows["threshold"] = float(threshold)
+        test_rows["is_error"] = test_rows["true_label"] != test_rows["pred_label"]
+
+        test_rows["error_type"] = ""
+        test_rows.loc[
+            (test_rows["true_label"] == "ham") & (test_rows["pred_label"] == "spam"),
+            "error_type"
+        ] = "false_positive"
+
+        test_rows.loc[
+            (test_rows["true_label"] == "spam") & (test_rows["pred_label"] == "ham"),
+            "error_type"
+        ] = "false_negative"
+
+        misclassified = test_rows[test_rows["is_error"]].copy()
+        false_positives = test_rows[test_rows["error_type"] == "false_positive"].copy()
+        false_negatives = test_rows[test_rows["error_type"] == "false_negative"].copy()
+
+        if errors_output_dir:
+            os.makedirs(errors_output_dir, exist_ok=True)
+
+            debug_cols = [
+                "doc_id",
+                label_column,
+                "true_label",
+                "pred_label",
+                "spam_probability",
+                "threshold",
+                "is_error",
+                "error_type",
+                "text_preview",
+                "raw_text",
+            ]
+
+            existing_debug_cols = [c for c in debug_cols if c in test_rows.columns]
+
+            test_rows[existing_debug_cols].to_csv(
+                os.path.join(errors_output_dir, "test_predictions.csv"),
+                index=False,
+                encoding="utf-8"
+            )
+
+            misclassified[existing_debug_cols].to_csv(
+                os.path.join(errors_output_dir, "test_misclassified.csv"),
+                index=False,
+                encoding="utf-8"
+            )
+
+            false_positives[existing_debug_cols].to_csv(
+                os.path.join(errors_output_dir, "false_positives.csv"),
+                index=False,
+                encoding="utf-8"
+            )
+
+            false_negatives[existing_debug_cols].to_csv(
+                os.path.join(errors_output_dir, "false_negatives.csv"),
+                index=False,
+                encoding="utf-8"
+            )
+
+            print(f"\n[OK] Predizioni test salvate in: {errors_output_dir}")
+            print(f"[OK] Errori totali: {len(misclassified)}")
+            print(f"[OK] False positive: {len(false_positives)}")
+            print(f"[OK] False negative: {len(false_negatives)}")
+
         print("=" * 60)
         print("SPAM CLASSIFICATION REPORT")
         print("=" * 60)
@@ -298,8 +405,12 @@ class SpamClassifier(PipelineStep):
             "confusion_matrix": confusion_matrix(y_test, y_pred),
             "roc_auc": auc,
             "feature_importance": importances,
-            
+            "test_predictions": test_rows,
+            "misclassified": misclassified,
+            "false_positives": false_positives,
+            "false_negatives": false_negatives, 
         }
+
 
     @staticmethod
     def save_model(result: dict, output_path: str):
@@ -314,13 +425,14 @@ class SpamClassifier(PipelineStep):
         joblib.dump(artifact, output_path)
         print(f"[OK] Modello salvato in: {output_path}")
 
+
 class SpamFilter(BaseFilter):
     """ 
     Filtro spam vero e proprio.
     - I documenti ham continuano nella pipeline
     - I documenti spam vengono scartati e salvati nella cartella rejected
     """
-        
+    
     name = "Spam Filter"
 
     def __init__(

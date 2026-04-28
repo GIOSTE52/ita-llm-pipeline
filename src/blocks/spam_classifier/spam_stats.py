@@ -1,12 +1,8 @@
 from __future__ import annotations
-
-
 import csv
 import os
 from typing import Dict, List, Optional
 import re
-
-
 from datatrove.pipeline.base import PipelineStep
 from datatrove.data import DocumentsPipeline
 
@@ -44,8 +40,6 @@ def _normalize_spam_label(raw_label: Optional[str]) -> str:
     return ""
 
 
-
-
 def _extract_spam_label(metadata: dict) -> str:
     for key in ("spam_label_gold", "spam_label", "spam_gold_label"):
         label = _normalize_spam_label(metadata.get(key))
@@ -71,7 +65,6 @@ def _basic_char_stats(text: str) -> Dict[str, float]:
             "currency_symbol_count": 0.0,
         }
 
-
     digit_count = 0
     upper_count = 0
     punct_count = 0
@@ -80,7 +73,6 @@ def _basic_char_stats(text: str) -> Dict[str, float]:
     question_count = 0
     newline_count = 0
     currency_symbol_count = 0
-
 
     for c in text:
         if c.isdigit():
@@ -100,7 +92,6 @@ def _basic_char_stats(text: str) -> Dict[str, float]:
             elif c in {"€", "$"}:
                 currency_symbol_count += 1
 
-
     return {
         "char_count": float(char_count),
         "digit_count": float(digit_count),
@@ -113,24 +104,19 @@ def _basic_char_stats(text: str) -> Dict[str, float]:
         "newline_count": float(newline_count),
         "currency_symbol_count": float(currency_symbol_count),
     }
+
+
 #gestione language score
 def _clip01(x: float) -> float:
     return max(0.0, min(1.0, x))
-
-
 
 
 def _safe_div(a: float, b: float) -> float:
     return a / b if b else 0.0
 
 
-
-
 def _tokenize_lang_words(text: str) -> list[str]:
     return extract_tokens(text, lowercase=True) 
-
-
-
 
 
 def _sentence_chunks(text: str) -> list[str]:
@@ -138,21 +124,16 @@ def _sentence_chunks(text: str) -> list[str]:
     return [c.strip() for c in chunks if c.strip()]
 
 
-
-
 def compute_custom_lang_score(text: str, metadata: dict | None = None) -> float:
     metadata = metadata or {}
     text = _safe_text(text).strip()
 
-
     if not text:
         return 0.0
-
 
     tokens = _tokenize_lang_words(text)
     if not tokens:
         return 0.0
-
 
     total_chars = len(text)
     alpha_chars = sum(ch.isalpha() for ch in text)
@@ -160,16 +141,13 @@ def compute_custom_lang_score(text: str, metadata: dict | None = None) -> float:
     punct_chars = sum((not ch.isalnum()) and (not ch.isspace()) for ch in text)
     accented_count = sum(ch.lower() in ACCENTED_CHARS for ch in text)
 
-
     token_count = len(tokens)
     long_tokens = sum(len(t) >= 4 for t in tokens)
     short_tokens = sum(len(t) <= 2 for t in tokens)
     avg_word_len = sum(len(t) for t in tokens) / token_count
 
-
     stopword_hits = sum(t in ITALIAN_STOPWORDS_MINI for t in tokens)
     common_word_hits = sum(t in ITALIAN_COMMON_WORDS for t in tokens)
-
 
     stopword_ratio = _safe_div(stopword_hits, token_count)
     common_word_ratio = _safe_div(common_word_hits, token_count)
@@ -180,20 +158,16 @@ def compute_custom_lang_score(text: str, metadata: dict | None = None) -> float:
     long_token_ratio = _safe_div(long_tokens, token_count)
     short_token_ratio = _safe_div(short_tokens, token_count)
 
-
     chunks = _sentence_chunks(text)
     avg_chunk_len = sum(len(c) for c in chunks) / len(chunks) if chunks else len(text)
 
-
     raw_lang_score = _safe_float(metadata.get("language_score"), 0.0)
     raw_lang_score = _clip01(raw_lang_score)
-
 
     score = 0.0
     score += 0.22 * _clip01(alpha_ratio / 0.75)
     score += 0.22 * _clip01(stopword_ratio / 0.18)
     score += 0.12 * _clip01(common_word_ratio / 0.08)
-
 
     if 4.0 <= avg_word_len <= 8.5:
         avg_len_score = 1.0
@@ -205,9 +179,7 @@ def compute_custom_lang_score(text: str, metadata: dict | None = None) -> float:
         avg_len_score = 0.0
     score += 0.10 * _clip01(avg_len_score)
 
-
     score += 0.08 * _clip01(long_token_ratio / 0.45)
-
 
     if 20 <= avg_chunk_len <= 180:
         chunk_score = 1.0
@@ -219,20 +191,16 @@ def compute_custom_lang_score(text: str, metadata: dict | None = None) -> float:
         chunk_score = 0.0
     score += 0.08 * _clip01(chunk_score)
 
-
     score += 0.04 * _clip01(accented_ratio / 0.01)
     score += 0.06 * raw_lang_score
-
 
     penalty = 0.0
     penalty += 0.10 * _clip01(digit_ratio / 0.20)
     penalty += 0.08 * _clip01(punct_ratio / 0.22)
     penalty += 0.06 * _clip01(short_token_ratio / 0.45)
 
-
     final_score = score - penalty
     final_score = 0.15 + (0.75 * _clip01(final_score))
-
 
     return round(_clip01(final_score), 4)
 
@@ -242,12 +210,10 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
     text = _safe_text(getattr(doc, "text", ""))
     metadata = getattr(doc, "metadata", {}) or {}
 
-
     basic = _basic_char_stats(text)
 
     tokens = extract_tokens(text)
     tokens_lower = [tok.lower() for tok in tokens]
-
 
     word_count = len(tokens)
     unique_word_count = len(set(tokens_lower))
@@ -255,10 +221,39 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         sum(len(tok) for tok in tokens) / word_count if word_count else 0.0
     )
 
-
-
     kw = keyword_bundle(text)
     pat = quick_pattern_counts(text)
+
+    ham_business_hits = float(pat["ham_business_hits"])
+    ham_formal_hits = float(pat["ham_formal_hits"])
+    ham_admin_doc_hits = float(pat["ham_admin_doc_hits"])
+    ham_technical_business_hits = float(pat["ham_technical_business_hits"])
+    business_signature_hits = float(pat["business_signature_hits"])
+
+    spam_keyword_hits = float(kw.spam_keywords)
+    cta_keyword_hits = float(kw.cta_keywords)
+
+    ham_to_spam_keyword_ratio = (
+        (ham_business_hits + 1.0) / (spam_keyword_hits + 1.0)
+    )
+
+    ham_to_cta_ratio = (
+        (ham_business_hits + 1.0) / (cta_keyword_hits + 1.0)
+    )
+
+    # da tenere d'occhio
+
+    ham_strength_score = float(
+        ham_formal_hits +
+        ham_admin_doc_hits +
+        ham_technical_business_hits +
+        business_signature_hits
+    )
+
+
+    ham_strength_to_spam_ratio = (
+        (ham_strength_score + 1.0) / (spam_keyword_hits + 1.0)
+    ) 
 
 
     lang = _safe_text(metadata.get("language")).lower()
@@ -266,7 +261,6 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
    
     url_count = float(pat["url_count"])
     email_count = float(pat["email_count"])
-
 
      # --- NUOVE COMBO CHEAP ---
     # booleane leggere che spesso rendono più delle feature singole
@@ -278,12 +272,33 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
     has_delivery_and_link = 1.0 if (kw.delivery_keywords > 0 and pat["url_count"] > 0) else 0.0
 
 
+    has_ham_and_no_url = 1.0 if (
+    ham_business_hits > 0 and pat["url_count"] == 0
+    ) else 0.0
+
+    has_formal_and_no_cta = 1.0 if (
+        ham_formal_hits > 0 and cta_keyword_hits == 0
+    ) else 0.0
+
+    has_admin_doc_and_no_url = 1.0 if (
+        ham_admin_doc_hits > 0 and pat["url_count"] == 0
+    ) else 0.0
+
+    has_technical_business_and_no_cta = 1.0 if (
+        ham_technical_business_hits > 0 and cta_keyword_hits == 0
+    ) else 0.0
+
+    has_signature_and_no_cta = 1.0 if (
+        business_signature_hits > 0 and cta_keyword_hits == 0
+    ) else 0.0
+
     # score aggregato cheap sulla pressione simbolica
     symbol_pressure_score = float(
-        basic["exclamation_count"] +
-        basic["currency_symbol_count"] +
-        pat["promo_symbol_count"]
+        pat["promo_symbol_count"] +
+        pat["uppercase_token_count"] +
+        pat["digit_run_count"]
     )
+
 
     features = {
         "doc_id": _safe_text(getattr(doc, "id", "")) or _safe_text(metadata.get("id")),
@@ -316,15 +331,29 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "uppercase_token_count": float(pat["uppercase_token_count"]),
         "short_line_count": float(pat["short_line_count"]),
         "short_token_count": float(pat["short_token_count"]),
-        "ham_business_hits": float(pat["ham_business_hits"]),
+
+        # ham/business
+        "ham_business_hits": ham_business_hits,
+        "ham_formal_hits": ham_formal_hits,
+        "ham_admin_doc_hits": ham_admin_doc_hits,
+        "ham_technical_business_hits": ham_technical_business_hits,
+        "business_signature_hits": business_signature_hits,
+
         "digit_run_count": float(pat["digit_run_count"]),
-        "has_link_and_cta": has_link_and_cta, #nuova
+
+        "has_link_and_cta": has_link_and_cta, 
         "has_urgency_and_cta": has_urgency_and_cta, #nuova
         "has_brand_and_link": has_brand_and_link, #nuova
         "has_money_and_cta": has_money_and_cta, #nuova
         "has_account_and_security": has_account_and_security, #nuova
         "has_delivery_and_link": has_delivery_and_link, #nuova
         "symbol_pressure_score": symbol_pressure_score, #nuova
+        "has_ham_and_no_url": has_ham_and_no_url,
+        "has_formal_and_no_cta": has_formal_and_no_cta,
+        "has_admin_doc_and_no_url": has_admin_doc_and_no_url,
+        "has_technical_business_and_no_cta": has_technical_business_and_no_cta,
+        "has_signature_and_no_cta": has_signature_and_no_cta, 
+
         "suspicious_tld_count": float(pat["suspicious_tld_count"]),
         "shortener_url_count": float(pat["shortener_url_count"]),
         "cta_plus_url_score": float(pat["cta_plus_url_score"]),
@@ -343,12 +372,14 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "promo_keyword_hits": float(kw.promo_code_keywords),
         "lang_score": lang_score,
         "lang_is_ita": 1.0 if lang in {"ita", "it", "italian"} else 0.0,
+        "ham_to_spam_keyword_ratio": ham_to_spam_keyword_ratio,  
+        "ham_to_cta_ratio": ham_to_cta_ratio,
+        "ham_strength_to_spam_ratio": ham_strength_to_spam_ratio,
+        "ham_strength_score": ham_strength_score,
         
-        
+
     }
     return features
-
-
 
 
 FEATURE_COLUMNS: List[str] = [
@@ -383,7 +414,13 @@ FEATURE_COLUMNS: List[str] = [
     "shortener_url_count",
     "cta_plus_url_score",
     "brand_plus_link_score",
+
     "ham_business_hits",
+    "ham_formal_hits",
+    "ham_admin_doc_hits",
+    "ham_technical_business_hits",
+    "business_signature_hits",
+
     "action_phrase_count",
     "promo_symbol_count",
     "uppercase_token_count",
@@ -394,6 +431,14 @@ FEATURE_COLUMNS: List[str] = [
     "has_money_and_cta",
     "has_account_and_security",
     "has_delivery_and_link",
+
+    "has_ham_and_no_url",
+    "has_formal_and_no_cta",
+    "has_admin_doc_and_no_url",
+    "has_technical_business_and_no_cta",
+    "has_signature_and_no_cta",
+
+
     "symbol_pressure_score",
     "urgency_cta_url_combo",
     "money_cta_combo",
@@ -409,14 +454,25 @@ FEATURE_COLUMNS: List[str] = [
     "promo_keyword_hits",
     "lang_score",
     "lang_is_ita",
+    "ham_to_spam_keyword_ratio", 
+    "ham_to_cta_ratio",
+    "ham_strength_to_spam_ratio",
+    "ham_strength_score",
+
 ]
+
+
+# info per debug
+DEBUG_COLUMNS: List[str] = [
+    "text_preview",
+    "raw_text",
+] 
 
 
 # è il blocco chiamato dalla pipeline
 # estrae i documenti, calcola le features e le insersce nel csv
 class SpamFeatureExtractor(PipelineStep):
     name = "Spam Feature Extractor"
-
 
     def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
         for doc in data:
@@ -430,40 +486,31 @@ class SpamFeatureExtractor(PipelineStep):
 
 # prima i writer scrivevano in parallelo sullo stesso csv,
 #ora sono separati e poi vengono uniti alla fine
-
-
 class SpamFeatureCsvWriter(PipelineStep):
     name = "Spam Feature CSV Writer"
-
 
     def __init__(self, output_folder: str, csv_filename: str = "spam_doc_features.csv"):
         super().__init__()
         self.output_folder = output_folder
         self.csv_filename = csv_filename
 
-
     def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
         os.makedirs(self.output_folder, exist_ok=True)
         rank_filename = f"rank_{rank}_{self.csv_filename}"
         csv_path = os.path.join(self.output_folder, rank_filename)
 
-
         file_exists = os.path.exists(csv_path)
         write_header = not file_exists or os.path.getsize(csv_path) == 0
 
-
         with open(csv_path, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=FEATURE_COLUMNS)
-
+            writer = csv.DictWriter(f, fieldnames=FEATURE_COLUMNS + DEBUG_COLUMNS) 
 
             if write_header:
                 writer.writeheader()
 
-
             for doc in data:
                 metadata = getattr(doc, "metadata", {}) or {}
                 row = {}
-
 
                 for col in FEATURE_COLUMNS:
                     if col == "doc_id":
@@ -475,7 +522,9 @@ class SpamFeatureCsvWriter(PipelineStep):
                     else:
                         row[col] = metadata.get(col, "")
 
-
+                text = getattr(doc, "text", "") or ""
+                row["text_preview"] = text[:500].replace("\n", " ").replace("\r", " ")
+                row["raw_text"] = text 
                 writer.writerow(row)
                 yield doc
 

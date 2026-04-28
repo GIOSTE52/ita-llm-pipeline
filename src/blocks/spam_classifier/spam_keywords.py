@@ -11,10 +11,7 @@ DELIVERY_BRANDS: Set[str] = {
     "sda", "bartolini", "brt", "dpd", "gls",
     "poste delivery", "fedex", "ups", "dhl",
     "poste italiane", "poste delivery", "amazon",
-    "mondial relay", "parcel", "tracking number",
-    "punto di ritiro", "indirizzo incompleto",
-    "consegna fallita", "tentata consegna",
-    "ritiro entro", "spese doganali", "oneri doganali",
+    "mondial relay", "parcel", 
 }
 
 
@@ -27,7 +24,6 @@ BANK_PAYMENT_TERMS: Set[str] = {
     "saldo disponibile", "rimborso in sospeso",
 }
 
-
 # verifica identità / kyc / documenti
 IDENTITY_VERIFICATION_TERMS: Set[str] = {
     "verifica identita", "documento di identita", "conferma documento",
@@ -35,7 +31,6 @@ IDENTITY_VERIFICATION_TERMS: Set[str] = {
     "aggiornamento dati", "conferma dati", "dati mancanti",
     "profilo incompleto",
 }
-
 
 # spam promo aggressivo / pressione commerciale
 PROMO_PRESSURE_TERMS: Set[str] = {
@@ -45,15 +40,84 @@ PROMO_PRESSURE_TERMS: Set[str] = {
     "non perdere", "offerta riservata", "accesso immediato",
 }
 
-
-# ham business / amministrativo / formale
-HAM_BUSINESS_TERMS: Set[str] = {
-    "in allegato", "resto a disposizione", "cordiali saluti",
-    "in riferimento a", "come concordato", "distinti saluti",
-    "pratica", "documentazione", "fattura allegata",
-    "gentile", "spettabile", "ufficio", "fornitore",
-    "cliente", "riunione", "preventivo",
+# ham formale / saluti / tono professionale
+HAM_FORMAL_TERMS: Set[str] = {
+    "cordiali saluti",
+    "distinti saluti",
+    "resto a disposizione",
+    "rimango a disposizione",
+    "restiamo a disposizione",
+    "in attesa di riscontro",
+    "buon lavoro",
+    "saluti",
+    "gentile",
+    "spettabile",
+    "buongiorno",
+    "buonasera",
 }
+
+# ham amministrativo / documenti reali
+HAM_ADMIN_DOC_TERMS: Set[str] = {
+    "in allegato",
+    "allego",
+    "alleghiamo",
+    "si allega",
+    "trasmettiamo",
+    "fattura allegata",
+    "fattura elettronica",
+    "nota di credito",
+    "proforma",
+    "ddt",
+    "documento di trasporto",
+    "ordine cliente",
+    "ordine fornitore",
+    "conferma d ordine",
+    "documentazione",
+    "pratica",
+}
+
+# ham tecnico/commerciale legittimo
+HAM_TECHNICAL_BUSINESS_TERMS: Set[str] = {
+    "preventivo",
+    "preventivo richiesto",
+    "offerta commerciale",
+    "scheda tecnica",
+    "capitolato",
+    "computo metrico",
+    "sopralluogo",
+    "appuntamento",
+    "consegna materiale",
+    "ritiro materiale",
+    "fornitura",
+    "posa",
+    "cantiere",
+    "materiale",
+    "lavorazione",
+    "montaggio",
+    "misure",
+    "progetto",
+    "tavola",
+    "disegno",
+}
+
+# ham business generale = unione delle liste specifiche + termini generici aziendali
+HAM_BUSINESS_TERMS: Set[str] = set().union(
+    HAM_FORMAL_TERMS,
+    HAM_ADMIN_DOC_TERMS,
+    HAM_TECHNICAL_BUSINESS_TERMS,
+    {
+        "in riferimento a",
+        "come concordato",
+        "come da accordi",
+        "come da richiesta",
+        "ufficio",
+        "fornitore",
+        "cliente",
+        "riunione",
+    },
+)
+
+
 
 
 # verbi/frasi di azione cheap, senza NLP
@@ -62,9 +126,6 @@ ACTION_PHRASE_TERMS: Set[str] = {
     "conferma", "conferma ora", "accedi", "scarica",
     "attiva", "richiedi", "aggiorna", "scopri",
 }
-
-
-
 
 ITALIAN_STOPWORDS_MINI = {
     "il", "lo", "la", "i", "gli", "le",
@@ -84,7 +145,6 @@ ITALIAN_STOPWORDS_MINI = {
     "grazie", "gentile", "salve", "buongiorno",
 }
 
-
 ITALIAN_COMMON_WORDS = {
     "pagamento", "ordine", "consegna", "fattura", "cliente", "servizio",
     "offerta", "spedizione", "verifica", "accesso", "conto", "account",
@@ -93,10 +153,8 @@ ITALIAN_COMMON_WORDS = {
     "numero", "telefono", "indirizzo", "ufficio", "azienda", "supporto",
 }
 
-
 PROMO_SYMBOLS = {"%", "€", "$", "!"}
 ACCENTED_CHARS = set("àèéìòù")
-
 
 URGENCY_TERMS: Set[str] = {
     "urgente", "subito", "immediato", "scade", "scadenza", "oggi",
@@ -104,13 +162,11 @@ URGENCY_TERMS: Set[str] = {
     "bloccato", "sospeso",
 }
 
-
 MONEY_TERMS: Set[str] = {
     "gratis", "gratuito", "offerta", "sconto", "bonus", "premio",
     "vincita", "guadagno", "cashback", "rimborso", "pagamento",
     "bonifico", "saldo", "fattura", "euro", "€",
 }
-
 
 CTA_TERMS: Set[str] = {
     "clicca", "clicca qui", "clicca sul link", "premi qui",
@@ -123,14 +179,12 @@ CTA_TERMS: Set[str] = {
     "scopri", "scopri ora", 
 }
 
-
 ACCOUNT_TERMS: Set[str] = {
     "account", "profilo", "accesso", "password", "credenziali",
     "verifica account", "reimposta password", "login",
     "conferma identità", "utenza", "conto", "conto corrente",
     "carta", "wallet", "profilo incompleto", "dati account", 
 }
-
 
 SECURITY_TERMS: Set[str] = {
     "sicurezza", "alert", "allerta", "anomalo", "sospetto",
@@ -141,7 +195,6 @@ SECURITY_TERMS: Set[str] = {
     "misura di sicurezza", "conferma identita", "protezione account",
 }
 
-
 DELIVERY_TERMS: Set[str] = {
     "consegna", "spedizione", "pacco", "corriere",
     "tracking", "tracciamento", "tentata consegna",
@@ -149,10 +202,8 @@ DELIVERY_TERMS: Set[str] = {
     "ritiro", "ritiro entro", "punto di ritiro",
     "giacenza", "fermo deposito", "spese di consegna",
     "spese doganali", "oneri doganali", "spedizione bloccata",
-    "ordine in arrivo", "ordine sospeso", 
-
+    "ordine in arrivo", "ordine sospeso", "tracking number",
 }
-
 
 BRAND_TERMS: Set[str] = {
     "poste italiane", "poste", "inps", "agenzia entrate", "paypal",
@@ -161,17 +212,14 @@ BRAND_TERMS: Set[str] = {
     "microsoft", "enel", "tim",
 }
 
-
 UNSUBSCRIBE_TERMS: Set[str] = {
     "unsubscribe", "disiscriviti", "cancella iscrizione",
     "annulla iscrizione", "rimuovi", "opt-out",
 }
 
-
 PROMO_CODE_TERMS: Set[str] = {
     "codice", "coupon", "promo", "promocode", "voucher", "gift card",
 }
-
 
 SPAM_TERMS: Set[str] = set().union(
     URGENCY_TERMS,
@@ -190,20 +238,15 @@ SPAM_TERMS: Set[str] = set().union(
     ACTION_PHRASE_TERMS,
 )
 
-
 SUSPICIOUS_TLDS: Set[str] = {
     ".xyz", ".top", ".click", ".live", ".shop", ".loan", ".buzz",
     ".win", ".cf", ".tk", ".ml", ".ga",
 }
 
-
 URL_SHORTENERS: Set[str] = {
     "bit.ly", "tinyurl.com", "t.co", "ow.ly", "cutt.ly",
     "rebrand.ly", "is.gd", "buff.ly",
 }
-
-
-
 
 WORD_RE: Pattern[str] = re.compile(r"\b[\wÀ-ÖØ-öø-ÿ'-]+\b", re.UNICODE)
 
@@ -218,16 +261,38 @@ URL_RE: Pattern[str] = re.compile(r"""
     """,
     re.IGNORECASE | re.VERBOSE,
 )
+
 EMAIL_RE: Pattern[str] = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+
 AMOUNT_RE: Pattern[str] = re.compile(
     r"(?:€\s?\d+[\d.,]*|\d+[\d.,]*\s?€|\b\d+[\d.,]*\s?(?:euro|eur)\b)",
     re.IGNORECASE,
 )
 
-
 PROMO_CODE_RE: Pattern[str] = re.compile(
     r"(?i)\b(?:codice(?:\s+(?:promo|sconto|offerta))?|coupon|promo(?:code)?|voucher)\b\s*[:=-]?\s*(?-i:[A-Z0-9][A-Z0-9_-]{3,})\b"
 )
+
+BUSINESS_SIGNATURE_RE: Pattern[str] = re.compile(
+    r"""
+    (?:
+        \bp\.?\s*iva\b |
+        \bpartita\s+iva\b |
+        \bcodice\s+fiscale\b |
+        \bpec\b |
+        \btel\.?\b |
+        \btelefono\b |
+        \bcell\.?\b |
+        \bcellulare\b |
+        \bsede\s+legale\b |
+        \bsede\s+operativa\b |
+        \bwww\.[^\s]+ |
+        \bvia\s+[a-zàèéìòù0-9\s,'-]+
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
 
 @dataclass(frozen=True)
 class KeywordBundle:
@@ -263,16 +328,12 @@ def normalize_url(url: str) -> str:
     return cleaned
 
 
-
-
 # normalizza casi di termini attaccati a segni
 def normalize_for_matching(text: str) -> str:
     normalized = normalize_text(text)
     normalized = normalized.replace("'", " ")
     normalized = re.sub(r"[^0-9a-zA-ZÀ-ÖØ-öø-ÿ]+", " ", normalized, flags=re.UNICODE)
     return re.sub(r"\s+", " ", normalized).strip()
-
-
 
 
 # --- FIX IMPORTANTE ---
@@ -317,10 +378,10 @@ def extract_urls(text: str) -> Sequence[str]:
     return [normalize_url(u) for u in URL_RE.findall(text_wo_emails)] 
 
 
-
 # estrae email
 def extract_emails(text: str) -> Sequence[str]:
     return EMAIL_RE.findall(text)
+
 
 def extract_tokens(text: str, lowercase: bool = False) -> list[str]:
     if not text:
@@ -339,9 +400,6 @@ def count_suspicious_tlds(urls: Iterable[str]) -> int:
         if domain and any(domain.endswith(tld) for tld in SUSPICIOUS_TLDS):
             total += 1
     return total
-
-
-
 
 
 # conta url shortner
@@ -387,11 +445,11 @@ def count_short_tokens(text: str, max_len: int = 2) -> int:
             total += 1
     return total
 
+
 ACTION_PATTERN_RE: Pattern[str] = re.compile(
     r"\b(?:clicca(?:\s+qui)?|verifica|conferma|accedi|sblocca|aggiorna|attiva|firma\s+online|richiedi)\b",
     re.IGNORECASE,
 )
-
 
 PROMO_SYMBOL_RE: Pattern[str] = re.compile(r"[%€$!]")
 
@@ -408,7 +466,6 @@ def count_cta_url_cooccurrence(text: str) -> int:
     return total 
 
 
-
 # frasi in cui ci sono sia URL sia brand
 def count_brand_url_cooccurrence(text: str) -> int:
     total = 0
@@ -419,7 +476,6 @@ def count_brand_url_cooccurrence(text: str) -> int:
         if extract_urls(chunk) and count_term_matches(normalized, BRAND_TERMS) > 0:
             total += 1
     return total 
-
 
 
 # combo leggere ma molto mirate al caso spam
@@ -436,7 +492,6 @@ def count_urgency_cta_url_combo(text: str) -> int:
         ):
             total += 1
     return total
-
 
 
 def count_money_cta_combo(text: str) -> int:
@@ -457,15 +512,29 @@ def count_ham_business_terms(text: str) -> int:
     normalized = normalize_for_matching(text)
     return count_term_matches(normalized, HAM_BUSINESS_TERMS)
 
+def count_ham_formal_terms(text: str) -> int:
+    normalized = normalize_for_matching(text)
+    return count_term_matches(normalized, HAM_FORMAL_TERMS)
 
+
+def count_ham_admin_doc_terms(text: str) -> int:
+    normalized = normalize_for_matching(text)
+    return count_term_matches(normalized, HAM_ADMIN_DOC_TERMS)
+
+
+def count_ham_technical_business_terms(text: str) -> int:
+    normalized = normalize_for_matching(text)
+    return count_term_matches(normalized, HAM_TECHNICAL_BUSINESS_TERMS)
+
+
+def count_business_signature_hits(text: str) -> int:
+    return regex_count(BUSINESS_SIGNATURE_RE, text)
 
 
 # conta i match di frasi/verbi di azione
 def count_action_phrases(text: str) -> int:
     normalized = normalize_for_matching(text)
     return count_term_matches(normalized, ACTION_PHRASE_TERMS)
-
-
 
 
 # conta simboli promo/pressione come %, €, $, !
@@ -482,14 +551,11 @@ def count_digit_runs(text: str) -> int:
 def quick_pattern_counts(text: str) -> Dict[str, int]:
     emails = list(extract_emails(text))
     urls = list(extract_urls(text))
-
-
     domains = []
     for u in urls:
         d = extract_domain(u)
         if d:
             domains.append(d)
-
 
     unique_urls = {u.lower() for u in urls}
     unique_domains = set(domains)
@@ -509,19 +575,19 @@ def quick_pattern_counts(text: str) -> Dict[str, int]:
         "cta_plus_url_score": count_cta_url_cooccurrence(text),
         "brand_plus_link_score": count_brand_url_cooccurrence(text),
         "urgency_cta_url_combo": count_urgency_cta_url_combo(text),
-        "money_cta_combo": count_money_cta_combo(text),
+        "money_cta_combo": count_money_cta_combo(text),     
+        
+        # ham/business
         "ham_business_hits": count_ham_business_terms(text),
+        "ham_formal_hits": count_ham_formal_terms(text),
+        "ham_admin_doc_hits": count_ham_admin_doc_terms(text),
+        "ham_technical_business_hits": count_ham_technical_business_terms(text),
+        "business_signature_hits": count_business_signature_hits(text),     
+        
         "action_phrase_count": count_action_phrases(text),
         "promo_symbol_count": count_promo_symbols(text),
         "uppercase_token_count": count_uppercase_tokens(text),
         "digit_run_count": count_digit_runs(text),
-    } 
-
-
-
-
-
-
-
+}
 
 
