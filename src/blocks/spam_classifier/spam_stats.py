@@ -259,6 +259,42 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
     lang = _safe_text(metadata.get("language")).lower()
     lang_score = compute_custom_lang_score(text,metadata)
    
+    # rumore ma non per forza spam
+
+    noise_score = 0.0
+
+    if lang_score < 0.35:
+        noise_score += 1.0
+
+    if basic["punctuation_ratio"] > 0.18:
+        noise_score += 1.0
+
+    if basic["digit_ratio"] > 0.20:
+        noise_score += 1.0
+
+    if word_count > 0 and (float(pat["short_token_count"]) / word_count) > 0.35:
+        noise_score += 1.0
+
+    if avg_word_length < 3.0 or avg_word_length > 12.0:
+        noise_score += 1.0
+
+    noise_score = min(noise_score, 5.0)
+
+    spam_intent_score = float(
+        (1.5 * float(pat["cta_plus_url_score"])) +
+        (2.0 * float(pat["urgency_cta_url_combo"])) +
+        (1.5 * float(pat["money_cta_combo"])) +
+        (1.5 * float(pat["suspicious_tld_count"])) +
+        (1.0 * float(pat["shortener_url_count"])) +
+        (1.0 * float(kw.account_keywords > 0 and kw.security_keywords > 0)) +
+        (1.0 * float(kw.delivery_keywords > 0 and pat["url_count"] > 0))
+    )
+
+    noise_without_spam_intent = 1.0 if noise_score >= 2.0 and spam_intent_score == 0.0 else 0.0
+
+
+
+
     url_count = float(pat["url_count"])
     email_count = float(pat["email_count"])
 
@@ -376,7 +412,10 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "ham_to_cta_ratio": ham_to_cta_ratio,
         "ham_strength_to_spam_ratio": ham_strength_to_spam_ratio,
         "ham_strength_score": ham_strength_score,
-        
+        "noise_score": noise_score,
+        "spam_intent_score": spam_intent_score,
+        "noise_without_spam_intent": noise_without_spam_intent, 
+
 
     }
     return features
@@ -458,6 +497,10 @@ FEATURE_COLUMNS: List[str] = [
     "ham_to_cta_ratio",
     "ham_strength_to_spam_ratio",
     "ham_strength_score",
+    "noise_score",
+    "spam_intent_score",
+    "noise_without_spam_intent",
+
 
 ]
 

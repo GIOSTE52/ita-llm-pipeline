@@ -1,13 +1,15 @@
 # ITA-LLM-Pipeline
 
-Pipeline di pulizia e classificazione per corpora italiani basata su DataTrove. Il progetto legge shard JSONL, filtra i documenti non italiani, estrae feature statistiche, classifica la qualità con LightGBM e salva sia gli output validi sia gli scarti organizzati per tipologia.
+Pipeline di pulizia, classificazione spam e di qualità per corpora italiani basata su DataTrove. Il progetto legge shard JSONL, filtra i documenti non italiani, estrae feature statistiche, filtra lo spam con un modello LightGBM, classifica la qualità con LightGBM e salva sia gli output validi sia gli scarti organizzati per tipologia.
 
 ## Funzionalità
 
-- Filtro lingua italiano con soglia configurabile.
-- Estrazione estesa di feature documentali in `DocStatsCsv`.
+- Filtro lingua italiano con soglia configurabile .
+- Estrazione feature spam tramite `SpamFeatureExtractor` e scrittura CSV tramite `SpamFeatureCsvWriter`. 
+- Filtraggio spam tramite  modello `spam_lgbm.joblib` e salvataggio degli scarti spam in `output/rejected/2_spam`..
+- Estrazione estesa di feature documentali in `DocStatsCsv` per il classificatore qualità.
 - Classificazione qualità tramite modello `lgbm_quality_model.joblib`.
-- Aggregazione finale dei CSV parziali `rank_*_doc_stats_per_file.csv`.
+- Aggregazione finale dei CSV parziali `rank_*_doc_stats_per_file.csv` e `rank_*_spam_doc_features.csv`.
 - Analisi post-run degli scarti con `utils/output_organizer.py`.
 - Script dedicato per valutazione modello e confronto multi-modello in cross validation.
 
@@ -30,13 +32,18 @@ ita-llm-pipeline/
 ├── evaluation/
 │   ├── evaluation_report.html
 │   ├── evaluation_report.json
-│   └── feature_importance.csv
+│   ├── feature_importance.csv
+│   ├── spam_evaluation_report.html
+│   ├── spam_evaluation_report.json
+│   └── spam_feature_importance.csv
 ├── models/
 │   ├── lgbm_quality_model.joblib
 │   └── spam_lgbm.joblib
 ├── scripts/
 │   ├── evaluate_model.py
+|   ├── evaluate_spam_model.py
 │   ├── training_lgbmclassifier.py
+│   ├── training_spam_lgbmclassifier.py
 │   └── web_extracting_pipeline.py
 ├── src/
 │   ├── main.py
@@ -92,11 +99,67 @@ Variabili e valori principali:
 | `MODEL_PATH` | cartella con i modelli | `ROOT_DIR/models` |
 | `MAX_WORKERS` | numero worker DataTrove | default `cpu_count() - 2`, minimo `1` |
 
+## Gestione Dataset (Interno vs Esterno)
+
+- `config_loader.get_config()` usa come pattern input fisso `INPUT_SUB_PATTERN = train/*.jsonl`. 
+   Se la repository non prevede un override CLI del pattern, il pattern va modificato nel file di configurazione o nel `config_loader.py`.
+
+### 1. Utilizzo Dataset della Repository (Default)
+
+Per utilizzare i file contenuti in `data/train/*.jsonl`:
+
+- Nel file `src/config_loader.py`, imposta: `USE_EXTERNAL_DATA = False`.
+- (Opzionale) Nel `docker-compose.yml`, puoi lasciare commentata la riga del volume esterno.
+
+### 2. Utilizzo Dataset Esterno (Locale)
+
+Per puntare a una cartella esterna (es. un disco rigido o la Scrivania) senza spostare i file:
+1. **Docker Compose**: Decommenta o aggiungi la riga del volume nel servizio `pipeline`:
+   ```yaml
+   volumes:
+     - /tuo/percorso/sul/pc:/app/external_data:ro
+
 Note operative:
 
-- `config_loader.get_config()` usa come pattern input fisso `INPUT_SUB_PATTERN = train/*.jsonl`, bisogna modificarlo manualmente per cambiare la scelta del dataset in input.
 - `NUM_TASKS` viene calcolato contando i file che matchano `DATA_DIR/INPUT_SUB_PATTERN`.
 - `--tasks` viene parsato dalla CLI e sovrascrive `NUM_TASKS` se specificato.
+- per dataset spam conviene usare un pattern esplicito verso file JSONL etichettati, ad esempio `data/spam/*.jsonl`.
+
+## Formato dei dati in input per lo spam
+
+La pipeline lavora con documenti JSONL. Ogni riga deve rappresentare un documento.
+
+Schema minimo consigliato:
+
+```json
+{
+  "id": "doc-001",
+  "text": "testo del documento",
+  "label": "good/bad",
+  "metadata": {
+    "language": "ita",
+    "language_score": 0.98,
+    "spam_label_gold": "ham/spam",
+    "spam_subtype": "work",
+    "annotation_source": "manual",
+    "annotator": "carlo_v1",
+    "annotation_version": "spam_v1"
+  }
+}
+```
+
+Per il classificatore spam la label corretta è cercata in questo ordine:
+
+1. `metadata.spam_label_gold`
+2. `metadata.spam_label`
+3. `metadata.spam_gold_label`
+
+Le label ammesse sono:
+
+- `ham`
+- `spam`
+
+Sono normalizzati anche alcuni alias come `not_spam`, `non_spam`, `legit` e `junk`.
 
 ## Esecuzione
 
@@ -138,14 +201,16 @@ docker compose up --build
 
 1. `get_jsonl_reader(data_dir, pattern)`
 2. `get_language_filter(rejected_dir, threshold=0.75, languages="it")`
-3. `DocStatsCsv(..., csv_filename="doc_stats_per_file.csv", groups_to_compute=["summary"])`
-4. `ItalianClassification(..., threshold=0.65)`
-5. `get_jsonl_writer(output_dir)`
+3. `spamFeatureExtractor()`
+4. `SpamFilter(..., threshold=0.5)`
+5. `DocStatsCsv(..., csv_filename="doc_stats_per_file.csv", groups_to_compute=["summary"])`
+6. `ItalianClassification(..., threshold=0.65)`
+7. `get_jsonl_writer(output_dir)`
 
 Dopo l'esecuzione della pipeline, `src/main.py` esegue anche:
 
-1. aggregazione dei CSV per-rank in `FEATURE_DIR/doc_stats_per_file.csv`
-2. rimozione dei file temporanei `rank_*_doc_stats_per_file.csv`
+1. aggregazione dei CSV per-rank in `FEATURE_DIR/doc_stats_per_file.csv` e `FEATURE_DIR/spam_doc_features.csv`
+2. rimozione dei file temporanei `rank_*_doc_stats_per_file.csv` e `rank_*_spam_doc_features.csv`
 3. analisi finale degli output con `output_classification(REJECTED_DIR, OUTPUT_DIR)`
 
 ## Output prodotti
@@ -156,13 +221,16 @@ Struttura tipica:
 output/
 ├── italiano_pulito_${rank}.jsonl
 ├── feature/
-│   └── doc_stats_per_file.csv
+│   ├── doc_stats_per_file.csv
+│   └── spam_doc_features.csv
 ├── inspection/
 │   ├── rejected_was_bad.jsonl
 │   └── rejected_was_good.jsonl
 └── rejected/
     ├── 1_language/
     │   └── non_italiano_${rank}.jsonl
+    ├── 2_spam/
+    │   └── spam_rejected_${rank}.jsonl 
     └── 3_quality/
         └── quality_rejectd_${rank}.jsonl
 ```

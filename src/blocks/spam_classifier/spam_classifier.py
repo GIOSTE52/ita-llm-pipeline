@@ -53,9 +53,15 @@ EXCLUDED_TRAINING_FEATURES = {
     "annotation_source",
     "annotator",
     "annotation_version",
+    "url",
+    "file_path",
+    "date",
+    "dump",
+    "language",
+    "language_score",
 
     # feature escluse perché costanti/inutili nel dataset attuale
-    "brand_plus_link_score",
+    
     "short_line_count",
     "newline_count",
     "lang_is_ita",
@@ -66,10 +72,10 @@ EXCLUDED_TRAINING_FEATURES = {
     "unique_domain_count_text",
     "promo_code_pattern_count",
     "brand_keyword_hits",
-    "symbol_pressure_count",
-    "action_pharse_count",
+    "symbol_pressure_score",
     "char_count",
     "has_link_and_cta",
+    "ham_strenght_score",
     
 }
 
@@ -112,6 +118,7 @@ class SpamClassifier(PipelineStep):
             self.threshold,
         )
 
+   
 
     def _extract_features(self, doc) -> Optional[List[float]]:
         values = []
@@ -124,6 +131,24 @@ class SpamClassifier(PipelineStep):
             logger.warning("Feature mancanti/non numeriche per doc %s: %s", getattr(doc, "id", ""), e)
             return None
 
+    def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
+        for doc in data:
+            feats = self._extract_features(doc)
+            if feats is None:
+                doc.metadata["spam_pred_label"] = "ham"
+                doc.metadata["spam_pred_score"] = 0.0
+                yield doc
+                continue
+
+            X = np.array(feats, dtype=float).reshape(1, -1)
+            Xs = self.scaler.transform(X)
+            proba = self.model.predict_proba(Xs)[0]
+            spam_score = float(proba[1])
+            pred_label = "spam" if spam_score >= self.threshold else "ham"
+
+            doc.metadata["spam_pred_label"] = pred_label
+            doc.metadata["spam_pred_score"] = round(spam_score, 6)
+            yield doc
 
     def _predict_from_features(self, feats: List[float]) -> Tuple[str, float]:
         X = pd.DataFrame([feats], columns=self.feature_names)
@@ -223,6 +248,12 @@ class SpamClassifier(PipelineStep):
             "annotation_source",
             "annotator",
             "annotation_version",
+            "url",
+            "file_path",
+            "date",
+            "dump",
+            "language",
+            "language_score",
         }
 
         bad_used = [c for c in feat_names if c in forbidden_features]
@@ -453,18 +484,91 @@ class SpamFilter(BaseFilter):
         )
 
         super().__init__(exclusion_writer=exclusion_writer)
+    def _has_strong_spam_evidence(self, metadata: dict, spam_score: float) -> bool:
+        """
+        Evita di classificare come spam testi solo confusi, rotti o scritti male.
+        Lo spam deve avere almeno segnali concreti: URL, CTA, phishing, urgenza,
+        denaro, brand/link, TLD sospetti, shortener, ecc.
+        """
+
+        url_count = float(metadata.get("url_count_text", 0.0))
+        suspicious_tld_count = float(metadata.get("suspicious_tld_count", 0.0))
+        shortener_url_count = float(metadata.get("shortener_url_count", 0.0))
+
+        spam_keyword_hits = float(metadata.get("spam_keyword_hits", 0.0))
+        cta_keyword_hits = float(metadata.get("cta_keyword_hits", 0.0))
+        urgency_keyword_hits = float(metadata.get("urgency_keyword_hits", 0.0))
+        money_keyword_hits = float(metadata.get("money_keyword_hits", 0.0))
+        account_keyword_hits = float(metadata.get("account_keyword_hits", 0.0))
+        security_keyword_hits = float(metadata.get("security_keyword_hits", 0.0))
+        delivery_keyword_hits = float(metadata.get("delivery_keyword_hits", 0.0))
+        brand_keyword_hits = float(metadata.get("brand_keyword_hits", 0.0))
+
+        cta_plus_url_score = float(metadata.get("cta_plus_url_score", 0.0))
+        urgency_cta_url_combo = float(metadata.get("urgency_cta_url_combo", 0.0))
+        money_cta_combo = float(metadata.get("money_cta_combo", 0.0))
+
+        ham_business_hits = float(metadata.get("ham_business_hits", 0.0))
+        ham_strength_score = float(metadata.get("ham_strength_score", 0.0))
+
+        # Evidenze forti: phishing/spam classico
+        if suspicious_tld_count > 0:
+            return True
+
+        if shortener_url_count > 0 and cta_keyword_hits > 0:
+            return True
+
+        if cta_plus_url_score > 0:
+            return True
+
+        if urgency_cta_url_combo > 0:
+            return True
+
+        if money_cta_combo > 0:
+            return True
+
+        if account_keyword_hits > 0 and security_keyword_hits > 0:
+            return True
+
+        if delivery_keyword_hits > 0 and url_count > 0:
+            return True
+
+        if brand_keyword_hits > 0 and url_count > 0 and cta_keyword_hits > 0:
+            return True
+
+        # Spam molto evidente anche senza URL
+        if spam_keyword_hits >= 4 and (cta_keyword_hits > 0 or urgency_keyword_hits > 0 or money_keyword_hits > 0):
+            return True
+
+        # Se il modello è estremamente convinto, accetto lo scarto,
+        # ma solo se non sembra una comunicazione business/ham.
+        if spam_score >= 0.90 and ham_business_hits == 0 and ham_strength_score == 0:
+            return True
+
+        return False
 
     def filter(self, doc):
         if getattr(doc, "metadata", None) is None:
             doc.metadata = {}
-
+    
         pred_label, spam_score = self.classifier.predict_doc(doc)
-
+    
         doc.metadata["spam_pred_label"] = pred_label
         doc.metadata["spam_pred_score"] = round(float(spam_score), 6)
-
+    
         if pred_label == "spam":
-            doc.metadata["spam_reject_reason"] = "spam_detected"
-            return False, "spam_detected"
-
+            strong_evidence = self._has_strong_spam_evidence(doc.metadata, spam_score)
+            doc.metadata["spam_strong_evidence"] = strong_evidence
+    
+            if strong_evidence:
+                doc.metadata["spam_reject_reason"] = "spam_detected"
+                return False, "spam_detected"
+    
+            # Caso importante:
+            # il modello sospetta spam, ma mancano prove forti.
+            # Non lo butto nello spam: lo lascio passare al quality classifier.
+            doc.metadata["spam_uncertain_reason"] = "high_score_but_weak_spam_evidence"
+            return True
+    
         return True
+

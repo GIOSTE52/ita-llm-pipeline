@@ -27,7 +27,7 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, pattern,
         # 4. Estrazione feature spam nei metadata
         SpamFeatureExtractor(),
 
-        # 5. Scrittura CSV feature spam
+        # 5. Scrittura CSV feature spam serve per addestrare il modello poi si può togliere
         SpamFeatureCsvWriter(
         # Usiamo os.path.join per essere sicuri che funzioni su ogni sistema
             output_folder=os.path.join(output_dir, "feature"), 
@@ -38,7 +38,7 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, pattern,
         SpamFilter(
             model_path=os.path.join(model_path, "spam_lgbm.joblib"),
             rejected_dir=rejected_dir,
-            # threshold=0.7  se la levo la trashold viene decisa dal joblib
+            threshold=0.5  se la levo la trashold viene decisa dal joblib
         ),
 
         
