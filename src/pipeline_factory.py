@@ -38,8 +38,8 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, pattern,
         SpamFilter(
             model_path=os.path.join(model_path, "spam_lgbm.joblib"),
             rejected_dir=rejected_dir,
-            threshold=0.5  se la levo la trashold viene decisa dal joblib
-        ),
+            threshold=0.5  #se la levo la trashold viene decisa dal joblib
+            ),
 
         
         

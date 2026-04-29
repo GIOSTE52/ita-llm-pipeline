@@ -6,8 +6,6 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Dict, Iterable, Pattern, Sequence, Set
 
-# DIZIONARI
-
 DELIVERY_BRANDS: Set[str] = {
     "sda", "bartolini", "brt", "dpd", "gls",
     "poste delivery", "fedex", "ups", "dhl",
@@ -40,28 +38,25 @@ PROMO_PRESSURE_TERMS: Set[str] = {
 HAM_FORMAL_TERMS: Set[str] = {
     "cordiali saluti", "distinti saluti", "resto a disposizione",
     "rimango a disposizione", "restiamo a disposizione",
-    "in attesa di riscontro", "buon lavoro", "saluti", "gentile",
-    "spettabile", "buongiorno", "buonasera",
+    "in attesa di riscontro", "buon lavoro", "saluti",
+    "gentile", "spettabile", "buongiorno", "buonasera",
 }
 
 HAM_ADMIN_DOC_TERMS: Set[str] = {
     "in allegato", "allego", "alleghiamo", "si allega",
     "trasmettiamo", "fattura allegata", "fattura elettronica",
     "nota di credito", "proforma", "ddt",
-    "documento di trasporto", "ordine cliente",
-    "ordine fornitore", "conferma d ordine",
-    "documentazione", "pratica",
+    "documento di trasporto", "ordine cliente", "ordine fornitore",
+    "conferma d ordine", "documentazione", "pratica",
 }
 
 HAM_TECHNICAL_BUSINESS_TERMS: Set[str] = {
-    "preventivo", "preventivo richiesto",
-    "offerta commerciale", "scheda tecnica",
-    "capitolato", "computo metrico", "sopralluogo",
-    "appuntamento", "consegna materiale",
-    "ritiro materiale", "fornitura", "posa",
-    "cantiere", "materiale", "lavorazione",
-    "montaggio", "misure", "progetto",
-    "tavola", "disegno",
+    "preventivo", "preventivo richiesto", "offerta commerciale",
+    "scheda tecnica", "capitolato", "computo metrico",
+    "sopralluogo", "appuntamento", "consegna materiale",
+    "ritiro materiale", "fornitura", "posa", "cantiere",
+    "materiale", "lavorazione", "montaggio", "misure",
+    "progetto", "tavola", "disegno",
 }
 
 HAM_BUSINESS_TERMS: Set[str] = set().union(
@@ -70,8 +65,8 @@ HAM_BUSINESS_TERMS: Set[str] = set().union(
     HAM_TECHNICAL_BUSINESS_TERMS,
     {
         "in riferimento a", "come concordato",
-        "come da accordi", "come da richiesta", "ufficio", 
-        "fornitore", "cliente", "riunione",
+        "come da accordi", "come da richiesta",
+        "ufficio", "fornitore", "cliente", "riunione",
     },
 )
 
@@ -172,6 +167,9 @@ PROMO_CODE_TERMS: Set[str] = {
     "codice", "coupon", "promo", "promocode", "voucher", "gift card",
 }
 
+PROMO_SYMBOLS = {"%", "€", "$", "!"}
+ACCENTED_CHARS = set("àèéìòù")
+
 SPAM_TERMS: Set[str] = set().union(
     URGENCY_TERMS,
     MONEY_TERMS,
@@ -189,9 +187,6 @@ SPAM_TERMS: Set[str] = set().union(
     ACTION_PHRASE_TERMS,
 )
 
-PROMO_SYMBOLS = {"%", "€", "$", "!"}
-ACCENTED_CHARS = set("àèéìòù")
-
 SUSPICIOUS_TLDS: Set[str] = {
     ".xyz", ".top", ".click", ".live", ".shop", ".loan", ".buzz",
     ".win", ".cf", ".tk", ".ml", ".ga",
@@ -204,7 +199,6 @@ URL_SHORTENERS: Set[str] = {
 
 WORD_RE: Pattern[str] = re.compile(r"\b[\wÀ-ÖØ-öø-ÿ'-]+\b", re.UNICODE)
 
-# - https:/, www., domini nudi tipo .win o name.com/path
 URL_RE: Pattern[str] = re.compile(r"""
     (?:
         \bhttps?:/{1,2}[^\s<>()\[\]{}"']+ |
@@ -266,8 +260,6 @@ class KeywordBundle:
     brand_keywords: int
     unsubscribe_keywords: int
     promo_code_keywords: int
-
-#FUNZIONI
 
 def normalize_text(text: str) -> str:
     if not text:

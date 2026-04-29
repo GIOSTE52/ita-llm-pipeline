@@ -99,7 +99,7 @@ def _basic_char_stats(text: str) -> Dict[str, float]:
         "currency_symbol_count": float(currency_symbol_count),
     }
 
-def _clip01(x: float) -> float:     #gestione lang_score
+def _clip01(x: float) -> float:
     return max(0.0, min(1.0, x))
 
 def _tokenize_lang_words(text: str) -> list[str]:
@@ -491,7 +491,7 @@ DEBUG_COLUMNS: List[str] = [
     "raw_text",
 ] 
 
-class SpamFeatureExtractor(PipelineStep):       # è il blocco chiamato dalla pipeline, estrae i documenti, calcola le features e le insersce nel csv
+class SpamFeatureExtractor(PipelineStep):
     name = "Spam Feature Extractor"
 
     def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
@@ -544,3 +544,4 @@ class SpamFeatureCsvWriter(PipelineStep):
                 row["raw_text"] = text 
                 writer.writerow(row)
                 yield doc
+

@@ -19,7 +19,6 @@ from datatrove.data import DocumentsPipeline
 from datatrove.pipeline.filters.base_filter import BaseFilter
 from datatrove.pipeline.writers import JsonlWriter
 
-
 from .spam_stats import FEATURE_COLUMNS
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,6 @@ INV_LABEL_MAP = {0: "ham", 1: "spam"}
 LABEL_COLUMNS = ["spam_target_label", "target_label"]
 
 EXCLUDED_TRAINING_FEATURES = {
-
     # identificativi / label
     "doc_id",
     "id",
@@ -41,7 +39,7 @@ EXCLUDED_TRAINING_FEATURES = {
     "spam_gold_label",
     "label",
 
-    # debug / testo grezzo 
+    # debug / testo grezzo: NON devono mai entrare nel training
     "text",
     "raw_text",
     "text_preview",
@@ -49,7 +47,7 @@ EXCLUDED_TRAINING_FEATURES = {
     "body",
     "content",
 
-    # metadata di annotazione
+    # metadata di annotazione: utili per analisi, non per training
     "spam_subtype",
     "annotation_source",
     "annotator",
@@ -61,7 +59,8 @@ EXCLUDED_TRAINING_FEATURES = {
     "language",
     "language_score",
 
-    # feature escluse 
+    # feature escluse perché costanti/inutili nel dataset attuale
+    
     "short_line_count",
     "newline_count",
     "lang_is_ita",
@@ -85,7 +84,8 @@ DEFAULT_FEATURE_NAMES: List[str] = [
 
 class SpamClassifier(PipelineStep):
     """
-    Motore di inferenza spam. Non filtra i documenti: aggiunge solo metadata di predizione.
+    Motore di inferenza spam.
+    NON filtra i documenti: aggiunge solo metadata di predizione.
     """
     name = "Spam Classifier"
 
@@ -115,7 +115,9 @@ class SpamClassifier(PipelineStep):
             self.model_path,
             len(self.feature_names),
             self.threshold,
-        )   
+        )
+
+   
 
     def _extract_features(self, doc) -> Optional[List[float]]:
         values = []
@@ -186,22 +188,29 @@ class SpamClassifier(PipelineStep):
             raise ValueError("Nessuna feature valida trovata nel CSV")
         return available
     
+
+    #serve per rimuovere features non utili al training o che renderebbero troppo facile il training
     @staticmethod
     def _drop_bad_features(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
-        
+        # --- rimuove feature costanti ---
         constant_cols = [c for c in X.columns if X[c].nunique(dropna=False) <= 1]
 
+        # --- segnala feature quasi costanti ---
         near_constant_cols = []
         for c in X.columns:
             vc = X[c].value_counts(normalize=True, dropna=False)
             if not vc.empty and vc.iloc[0] >= 0.995:
                 near_constant_cols.append(c)
 
+        # --- nel dataset attuale rimuovo solo le costanti vere,
+        # le quasi costanti le segnalo ma non le butto in automatico ---
         remove_cols = sorted(set(constant_cols))
         keep = [c for c in X.columns if c not in remove_cols]
 
         return X[keep].copy(), remove_cols, sorted(set(near_constant_cols) - set(remove_cols)) 
 
+
+    #allena il modello sui dati estratti dal csv.
     @staticmethod
     def train_from_csv(
         csv_path: str,
@@ -244,6 +253,7 @@ class SpamClassifier(PipelineStep):
             "dump",
             "language",
             "language_score",
+
         }
 
         bad_used = [c for c in feat_names if c in forbidden_features]
@@ -264,7 +274,7 @@ class SpamClassifier(PipelineStep):
         X = df[feat_names].apply(pd.to_numeric, errors="coerce").fillna(0.0)
         y = df[label_column].map(LABEL_MAP)
 
-        
+        # remove constant junk before split
         X, dropped_constants, near_constants = SpamClassifier._drop_bad_features(X)
         feat_names = X.columns.tolist()
 
@@ -473,10 +483,11 @@ class SpamFilter(BaseFilter):
         )
 
         super().__init__(exclusion_writer=exclusion_writer)
-
     def _has_strong_spam_evidence(self, metadata: dict, spam_score: float) -> bool:
         """
         Evita di classificare come spam testi solo confusi, rotti o scritti male.
+        Lo spam deve avere almeno segnali concreti: URL, CTA, phishing, urgenza,
+        denaro, brand/link, TLD sospetti, shortener, ecc.
         """
 
         url_count = float(metadata.get("url_count_text", 0.0))
@@ -528,7 +539,8 @@ class SpamFilter(BaseFilter):
         if spam_keyword_hits >= 4 and (cta_keyword_hits > 0 or urgency_keyword_hits > 0 or money_keyword_hits > 0):
             return True
 
-        # Se il modello è estremamente convinto, accetto lo scarto
+        # Se il modello è estremamente convinto, accetto lo scarto,
+        # ma solo se non sembra una comunicazione business/ham.
         if spam_score >= 0.90 and ham_business_hits == 0 and ham_strength_score == 0:
             return True
 
@@ -558,4 +570,3 @@ class SpamFilter(BaseFilter):
             return True
     
         return True
-
