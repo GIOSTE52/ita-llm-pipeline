@@ -488,7 +488,6 @@ FEATURE_COLUMNS: List[str] = [
 
 DEBUG_COLUMNS: List[str] = [
     "text_preview",
-    "raw_text",
 ] 
 
 class SpamFeatureExtractor(PipelineStep):
@@ -541,7 +540,6 @@ class SpamFeatureCsvWriter(PipelineStep):
 
                 text = getattr(doc, "text", "") or ""
                 row["text_preview"] = text[:500].replace("\n", " ").replace("\r", " ")
-                row["raw_text"] = text 
                 writer.writerow(row)
                 yield doc
 
