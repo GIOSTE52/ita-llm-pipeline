@@ -3,9 +3,9 @@ from config_loader import get_config
 from pipeline_factory import build_italian_cleaning_pipeline
 from utils.output_organizer import output_classification
 from datatrove.utils.stats import PipelineStats
+from utils.csv_aggregator import aggregate_rank_csvs
 import os
-import subprocess
-import time
+
 
 def main():
     """
@@ -13,16 +13,16 @@ def main():
     """
     # 1. Carica i percorsi dal file config selezionato
     cfg = get_config()
-    
+  
     # 2. Crea i blocchi (passando i percorsi corretti)
     pipeline_blocks = build_italian_cleaning_pipeline(
         data_dir=cfg["DATA_DIR"],
         output_dir=cfg["OUTPUT_DIR"],
         rejected_dir=cfg["REJECTED_DIR"],
         pattern=cfg["INPUT_SUB_PATTERN"],
-        model_path=cfg["MODEL_PATH"]
+        model_path=cfg["MODEL_PATH"],
     )
-    
+  
     # 3. Esecuzione
     executor = LocalPipelineExecutor(
         pipeline=pipeline_blocks,
@@ -32,32 +32,23 @@ def main():
     # 4. Avvio della pipeline
     executor.run()
 
-    # --- NUOVO PUNTO 5: AGGREGAZIONE CSV ---
-    print("\n" + "=" * 60)
-    print("AGGREGAZIONE FINALE CSV: doc_stats_per_file.csv")
-    print("=" * 60)
-    
-    time.sleep(2) 
-
+    # 5. Aggregazione csv spam e quality
     feature_dir = cfg["FEATURE_DIR"]
-    final_name = "doc_stats_per_file.csv" 
-    final_output_csv = os.path.join(feature_dir, final_name)
-    
-    # Cercherà rank_0_doc_stats_per_file.csv, rank_1_...
-    temp_pattern = os.path.join(feature_dir, f"rank_*_{final_name}")
 
-    merge_cmd = f"awk 'FNR==1 && NR!=1{{next;}}{{print}}' {temp_pattern} > {final_output_csv}"
 
-    try:
-        subprocess.run(merge_cmd, shell=True, check=True)
-        print(f"Unione completata con successo!")
-        print(f"File finale: {final_output_csv}")
-        
-        # Pulizia
-        subprocess.run(f"rm {temp_pattern}", shell=True)
-        print("File temporanei dei rank rimossi.")
-    except Exception as e:
-        print(f"Errore durante l'aggregazione CSV: {e}")
+    csv_outputs = [
+        ("doc_stats_per_file.csv", "quality"),
+        ("spam_doc_features.csv", "spam"),
+    ]
+
+
+    for final_name, label in csv_outputs:
+        aggregate_rank_csvs(
+            feature_dir=feature_dir,
+            final_name=final_name,
+            label=label,
+            remove_parts=True,
+        )
 
     # --- FINE AGGREGAZIONE ---
 
