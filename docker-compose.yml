@@ -22,22 +22,5 @@ services:
     command: ["python3", "src/main.py", "--config", "configs/default.conf"]
     # command: ["python3", "src/main.py", "--config", "configs/stefano.conf"]
 
-# Da testare con `docker compose --profile test up --build`
-  test:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - ./tests:/app/tests:ro
-      - ./data:/app/data:ro
-      - ./output:/app/output
-      - ./logs:/app/logs
-      - ./requirements-dev.txt:/app/requirements-dev.txt:ro
-      - ./pytest.ini:/app/pytest.ini:ro
-      - hf_cache:/root/.cache/huggingface
-    command: ["sh", "-c", "pip install --no-cache-dir -r requirements-dev.txt && pytest tests/ -v"]
-    profiles:
-      - test
-
 volumes:
   hf_cache:
