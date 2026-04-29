@@ -4,19 +4,16 @@ import os
 import sys
 import warnings
 
-# 1. Silenziamo i warning di Scikit-Learn e LightGBM per pulizia log
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# 2. Aggiungiamo la cartella 'src' al path di sistema per evitare errori di import
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-# Import assoluto dal tuo pacchetto blocks
 from blocks.spam_classifier.spam_classifier import SpamClassifier
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Training del classificatore spam")
     
-    # Percorsi di default basati sulla tua struttura attuale
     parser.add_argument(
         "--csv-path",
         type=str,
@@ -50,20 +47,14 @@ def main() -> None:
     print(f"🚀 Avvio training su: {args.csv_path}")
     
     try:
-        # Addestramento
         result = SpamClassifier.train_from_csv(
             csv_path=args.csv_path,
             label_column=args.label_column,
             errors_output_dir=args.errors_dir,
         )
 
-
-
-        
-        # Creazione cartella models se manca
         os.makedirs(os.path.dirname(args.model_path), exist_ok=True)
         
-        # Salvataggio
         SpamClassifier.save_model(result, args.model_path)
         print(f"✅ Modello salvato con successo in: {args.model_path}")
         

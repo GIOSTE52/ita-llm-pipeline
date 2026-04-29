@@ -16,21 +16,18 @@ from .spam_keywords import (
     extract_tokens,
 )
 
-
-#controllo su non-stringhe o stringhe vuote
 def _safe_text(value) -> str:
     return value if isinstance(value, str) else ""
 
-
-# converte tutti i numeri in float
 def _safe_float(value, default=0.0) -> float:
     try:
         return float(value)
     except Exception:
         return default
+    
+def _safe_div(a: float, b: float) -> float:
+    return a / b if b else 0.0
 
-
-# normalizzazione della label spam
 def _normalize_spam_label(raw_label: Optional[str]) -> str:
     value = _safe_text(raw_label).strip().lower()
     if value in {"ham", "not_spam", "non_spam", "legit"}:
@@ -39,7 +36,6 @@ def _normalize_spam_label(raw_label: Optional[str]) -> str:
         return "spam"
     return ""
 
-
 def _extract_spam_label(metadata: dict) -> str:
     for key in ("spam_label_gold", "spam_label", "spam_gold_label"):
         label = _normalize_spam_label(metadata.get(key))
@@ -47,8 +43,6 @@ def _extract_spam_label(metadata: dict) -> str:
             return label
     return ""
 
-
-# calcolo feature sui caratteri di 'text'
 def _basic_char_stats(text: str) -> Dict[str, float]:
     char_count = len(text)
     if char_count == 0:
@@ -105,24 +99,15 @@ def _basic_char_stats(text: str) -> Dict[str, float]:
         "currency_symbol_count": float(currency_symbol_count),
     }
 
-
-#gestione language score
-def _clip01(x: float) -> float:
+def _clip01(x: float) -> float:     #gestione lang_score
     return max(0.0, min(1.0, x))
-
-
-def _safe_div(a: float, b: float) -> float:
-    return a / b if b else 0.0
-
 
 def _tokenize_lang_words(text: str) -> list[str]:
     return extract_tokens(text, lowercase=True) 
 
-
 def _sentence_chunks(text: str) -> list[str]:
     chunks = re.split(r"[.!?\n\r;:]+", text)
     return [c.strip() for c in chunks if c.strip()]
-
 
 def compute_custom_lang_score(text: str, metadata: dict | None = None) -> float:
     metadata = metadata or {}
@@ -204,8 +189,6 @@ def compute_custom_lang_score(text: str, metadata: dict | None = None) -> float:
 
     return round(_clip01(final_score), 4)
 
-
-# estrae le stats da 'doc'
 def extract_spam_features(doc) -> Dict[str, float | str]:
     text = _safe_text(getattr(doc, "text", ""))
     metadata = getattr(doc, "metadata", {}) or {}
@@ -420,7 +403,6 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
     }
     return features
 
-
 FEATURE_COLUMNS: List[str] = [
     "doc_id",
     "target_label",
@@ -504,17 +486,12 @@ FEATURE_COLUMNS: List[str] = [
 
 ]
 
-
-# info per debug
 DEBUG_COLUMNS: List[str] = [
     "text_preview",
     "raw_text",
 ] 
 
-
-# è il blocco chiamato dalla pipeline
-# estrae i documenti, calcola le features e le insersce nel csv
-class SpamFeatureExtractor(PipelineStep):
+class SpamFeatureExtractor(PipelineStep):       # è il blocco chiamato dalla pipeline, estrae i documenti, calcola le features e le insersce nel csv
     name = "Spam Feature Extractor"
 
     def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
@@ -526,9 +503,6 @@ class SpamFeatureExtractor(PipelineStep):
                 doc.metadata[k] = v
             yield doc
 
-
-# prima i writer scrivevano in parallelo sullo stesso csv,
-#ora sono separati e poi vengono uniti alla fine
 class SpamFeatureCsvWriter(PipelineStep):
     name = "Spam Feature CSV Writer"
 
@@ -570,4 +544,3 @@ class SpamFeatureCsvWriter(PipelineStep):
                 row["raw_text"] = text 
                 writer.writerow(row)
                 yield doc
-
