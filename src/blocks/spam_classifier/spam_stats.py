@@ -486,9 +486,6 @@ FEATURE_COLUMNS: List[str] = [
 
 ]
 
-DEBUG_COLUMNS: List[str] = [
-    "text_preview",
-] 
 
 class SpamFeatureExtractor(PipelineStep):
     name = "Spam Feature Extractor"
@@ -519,7 +516,7 @@ class SpamFeatureCsvWriter(PipelineStep):
         write_header = not file_exists or os.path.getsize(csv_path) == 0
 
         with open(csv_path, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=FEATURE_COLUMNS + DEBUG_COLUMNS) 
+            writer = csv.DictWriter(f, fieldnames=FEATURE_COLUMNS) 
 
             if write_header:
                 writer.writeheader()
@@ -538,8 +535,6 @@ class SpamFeatureCsvWriter(PipelineStep):
                     else:
                         row[col] = metadata.get(col, "")
 
-                text = getattr(doc, "text", "") or ""
-                row["text_preview"] = text[:500].replace("\n", " ").replace("\r", " ")
                 writer.writerow(row)
                 yield doc
 
