@@ -1,9 +1,9 @@
 from __future__ import annotations
-
 import csv
 import glob
 import os
 from typing import Optional
+import sys
 
 
 def aggregate_rank_csvs(
@@ -32,6 +32,7 @@ def aggregate_rank_csvs(
     - rimuove i file temporanei se remove_parts=True
     """
 
+    csv.field_size_limit(sys.maxsize)
     label = label or final_name
 
     print("\n" + "=" * 60)
