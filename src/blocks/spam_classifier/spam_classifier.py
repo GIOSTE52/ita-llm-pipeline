@@ -74,7 +74,13 @@ EXCLUDED_TRAINING_FEATURES = {
     "symbol_pressure_score",
     "char_count",
     "has_link_and_cta",
-    "ham_strenght_score",
+    "promo_symbol_count",
+    "noise_score",
+    "promo_keyword_hits",
+    "urgency_cta_url_combo",
+    
+    
+
     
 }
 
@@ -216,11 +222,11 @@ class SpamClassifier(PipelineStep):
         csv_path: str,
         feature_names: Optional[List[str]] = None,
         label_column: Optional[str] = None,
-        test_size: float = 0.5,
+        test_size: float = 0.3,
         n_estimators: int = 300,
         learning_rate: float = 0.05,
         random_state: int = 42,
-        threshold: float = 0.5,
+        threshold: float = 0.6,
         errors_output_dir: Optional[str] = None, 
 
     ) -> dict:
@@ -419,7 +425,7 @@ class SpamClassifier(PipelineStep):
         }).sort_values("importance_mean", ascending=False)
 
         print("\nTop feature importance:")
-        print(importances.head(30).to_string(index=False))
+        print(importances.to_string(index=False))
 
         return {
             "model": model,

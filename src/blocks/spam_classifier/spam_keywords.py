@@ -141,6 +141,23 @@ SECURITY_TERMS: Set[str] = {
     "misura di sicurezza", "conferma identita", "protezione account",
 }
 
+SAFE_SECURITY_HAM_TERMS: Set[str] = {
+    "non usare il link",
+    "apri direttamente il portale",
+    "sito ufficiale",
+    "non ti chiederemo mai",
+    "non chiediamo password",
+    "non condividere credenziali",
+    "non sono richiesti pagamenti",
+    "non sono richieste conferme",
+    "ignora questo messaggio",
+    "se non è stato lei",
+    "se non sei stato tu",
+    "puoi ignorare",
+    "nessuna azione richiesta",
+}
+
+
 DELIVERY_TERMS: Set[str] = {
     "consegna", "spedizione", "pacco", "corriere",
     "tracking", "tracciamento", "tentata consegna",
@@ -442,6 +459,11 @@ def count_promo_symbols(text: str) -> int:
 def count_digit_runs(text: str) -> int:
     return len(re.findall(r"\b\d{4,}\b", text))
 
+def count_safe_security_ham_terms(text: str) -> int:
+    normalized = normalize_for_matching(text)
+    return count_term_matches(normalized, SAFE_SECURITY_HAM_TERMS)
+
+
 def quick_pattern_counts(text: str) -> Dict[str, int]:
     emails = list(extract_emails(text))
     urls = list(extract_urls(text))
@@ -482,4 +504,5 @@ def quick_pattern_counts(text: str) -> Dict[str, int]:
         "promo_symbol_count": count_promo_symbols(text),
         "uppercase_token_count": count_uppercase_tokens(text),
         "digit_run_count": count_digit_runs(text),
+        "safe_security_ham_hits": count_safe_security_ham_terms(text),
 }
