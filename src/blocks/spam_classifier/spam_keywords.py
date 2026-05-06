@@ -25,7 +25,7 @@ IDENTITY_VERIFICATION_TERMS: Set[str] = {
     "verifica identita", "documento di identita", "conferma documento",
     "selfie", "riconoscimento", "identificazione", "kyc",
     "aggiornamento dati", "conferma dati", "dati mancanti",
-    "profilo incompleto",
+    "profilo incompleto", "carta d'identità", "passaporto",
 }
 
 PROMO_PRESSURE_TERMS: Set[str] = {
@@ -39,7 +39,8 @@ HAM_FORMAL_TERMS: Set[str] = {
     "cordiali saluti", "distinti saluti", "resto a disposizione",
     "rimango a disposizione", "restiamo a disposizione",
     "in attesa di riscontro", "buon lavoro", "saluti",
-    "gentile", "spettabile", "buongiorno", "buonasera",
+    "gentile", "spettabile", "buongiorno", "buonasera", "salve",
+    "torni a trovarci",  "grazie", "grazie mille",
 }
 
 HAM_ADMIN_DOC_TERMS: Set[str] = {
@@ -91,7 +92,6 @@ ITALIAN_STOPWORDS_MINI = {
     "questo", "questa", "questi", "queste",
     "quello", "quella", "quelli", "quelle",
     "non", "più", "come", "dove", "quando", "anche",
-    "grazie", "gentile", "salve", "buongiorno",
 }
 
 ITALIAN_COMMON_WORDS = {
@@ -111,7 +111,8 @@ URGENCY_TERMS: Set[str] = {
 MONEY_TERMS: Set[str] = {
     "gratis", "gratuito", "offerta", "sconto", "bonus", "premio",
     "vincita", "guadagno", "cashback", "rimborso", "pagamento",
-    "bonifico", "saldo", "fattura", "euro", "€",
+    "bonifico", "saldo", "fattura", "euro", "€", "$", "£", "dollaro",
+    "dollari", "pounds", "sterlina",
 }
 
 CTA_TERMS: Set[str] = {
@@ -141,6 +142,23 @@ SECURITY_TERMS: Set[str] = {
     "misura di sicurezza", "conferma identita", "protezione account",
 }
 
+SAFE_SECURITY_HAM_TERMS: Set[str] = {
+    "non usare il link",
+    "apri direttamente il portale",
+    "sito ufficiale",
+    "non ti chiederemo mai",
+    "non chiediamo password",
+    "non condividere credenziali",
+    "non sono richiesti pagamenti",
+    "non sono richieste conferme",
+    "ignora questo messaggio",
+    "se non è stato lei",
+    "se non sei stato tu",
+    "puoi ignorare",
+    "nessuna azione richiesta",
+}
+
+
 DELIVERY_TERMS: Set[str] = {
     "consegna", "spedizione", "pacco", "corriere",
     "tracking", "tracciamento", "tentata consegna",
@@ -167,7 +185,7 @@ PROMO_CODE_TERMS: Set[str] = {
     "codice", "coupon", "promo", "promocode", "voucher", "gift card",
 }
 
-PROMO_SYMBOLS = {"%", "€", "$", "!"}
+PROMO_SYMBOLS = {"%", "€", "$", "!" , "$", "£",}
 ACCENTED_CHARS = set("àèéìòù")
 
 SPAM_TERMS: Set[str] = set().union(
@@ -442,6 +460,11 @@ def count_promo_symbols(text: str) -> int:
 def count_digit_runs(text: str) -> int:
     return len(re.findall(r"\b\d{4,}\b", text))
 
+def count_safe_security_ham_terms(text: str) -> int:
+    normalized = normalize_for_matching(text)
+    return count_term_matches(normalized, SAFE_SECURITY_HAM_TERMS)
+
+
 def quick_pattern_counts(text: str) -> Dict[str, int]:
     emails = list(extract_emails(text))
     urls = list(extract_urls(text))
@@ -482,4 +505,5 @@ def quick_pattern_counts(text: str) -> Dict[str, int]:
         "promo_symbol_count": count_promo_symbols(text),
         "uppercase_token_count": count_uppercase_tokens(text),
         "digit_run_count": count_digit_runs(text),
+        "safe_security_ham_hits": count_safe_security_ham_terms(text),
 }

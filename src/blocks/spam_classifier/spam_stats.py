@@ -289,7 +289,7 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
     has_money_and_cta = 1.0 if (kw.money_keywords > 0 and pat["action_phrase_count"] > 0) else 0.0
     has_account_and_security = 1.0 if (kw.account_keywords > 0 and kw.security_keywords > 0) else 0.0
     has_delivery_and_link = 1.0 if (kw.delivery_keywords > 0 and pat["url_count"] > 0) else 0.0
-
+    safe_security_ham_hits = float(pat["safe_security_ham_hits"])
 
     has_ham_and_no_url = 1.0 if (
     ham_business_hits > 0 and pat["url_count"] == 0
@@ -398,6 +398,13 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "noise_score": noise_score,
         "spam_intent_score": spam_intent_score,
         "noise_without_spam_intent": noise_without_spam_intent, 
+        "promo_symbol_count_clip": float(min(pat["promo_symbol_count"], 3)),
+        "exclamation_count_clip": float(min(basic["exclamation_count"], 5)),
+        "digit_run_count_clip": float(min(pat["digit_run_count"], 3)),
+        "uppercase_token_count_clip": float(min(pat["uppercase_token_count"], 5)),
+        "safe_security_ham_hits": safe_security_ham_hits,
+        "safe_security_to_spam_ratio": (safe_security_ham_hits + 1.0) / (spam_keyword_hits + 1.0),
+
 
 
     }
@@ -482,6 +489,13 @@ FEATURE_COLUMNS: List[str] = [
     "noise_score",
     "spam_intent_score",
     "noise_without_spam_intent",
+    "promo_symbol_count_clip",
+    "exclamation_count_clip",
+    "digit_run_count_clip",
+    "uppercase_token_count_clip",
+    "safe_security_ham_hits",
+    "safe_security_to_spam_ratio",
+
 
 
 ]

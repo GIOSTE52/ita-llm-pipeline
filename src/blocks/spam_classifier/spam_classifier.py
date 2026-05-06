@@ -57,9 +57,9 @@ EXCLUDED_TRAINING_FEATURES = {
     "date",
     "dump",
     "language",
-    "language_score",
+    "lang_score",
 
-    # feature escluse perché costanti/inutili nel dataset attuale
+    # feature escluse 
     
     "short_line_count",
     "newline_count",
@@ -74,7 +74,17 @@ EXCLUDED_TRAINING_FEATURES = {
     "symbol_pressure_score",
     "char_count",
     "has_link_and_cta",
-    "ham_strenght_score",
+    "promo_symbol_count",
+    "noise_score",
+    "promo_keyword_hits",
+    "urgency_cta_url_combo",
+    "digit_count",
+    "word_count",
+    "whitespace_ratio",
+    "ham_strength_score",
+    
+    
+
     
 }
 
@@ -139,9 +149,19 @@ class SpamClassifier(PipelineStep):
                 yield doc
                 continue
 
-            X = np.array(feats, dtype=float).reshape(1, -1)
-            Xs = self.scaler.transform(X)
-            proba = self.model.predict_proba(Xs)[0]
+            X = pd.DataFrame(
+                [feats],
+                columns=self.feature_names,
+            )
+
+            Xs = pd.DataFrame(
+                self.scaler.transform(X),
+                columns=self.feature_names,
+            )
+
+            proba = self.model.predict_proba(Xs)[0] 
+
+            
             spam_score = float(proba[1])
             pred_label = "spam" if spam_score >= self.threshold else "ham"
 
@@ -216,11 +236,11 @@ class SpamClassifier(PipelineStep):
         csv_path: str,
         feature_names: Optional[List[str]] = None,
         label_column: Optional[str] = None,
-        test_size: float = 0.5,
+        test_size: float = 0.3,
         n_estimators: int = 300,
         learning_rate: float = 0.05,
         random_state: int = 42,
-        threshold: float = 0.5,
+        threshold: float = 0.6,   
         errors_output_dir: Optional[str] = None, 
 
     ) -> dict:
@@ -290,9 +310,49 @@ class SpamClassifier(PipelineStep):
             stratify=y,
         )
 
+        # modificato 
+        
+        os.makedirs(errors_output_dir, exist_ok=True)
+
+        train_df = df.loc[X_train.index].copy()
+        test_df = df.loc[X_test.index].copy()
+    
+        train_df["split"] = "train"
+        test_df["split"] = "test"
+    
+        train_df.to_csv(
+            os.path.join(errors_output_dir, "spam_train_features.csv"),
+            index=False,
+        )
+    
+        test_df.to_csv(
+            os.path.join(errors_output_dir, "spam_test_features.csv"),
+            index=False,
+        )
+    
+        split_df = pd.concat([train_df, test_df], axis=0)
+        split_df.to_csv(
+            os.path.join(errors_output_dir, "spam_features_with_split.csv"),
+            index=False,
+        )
+    
+        print(f"[OK] Train/Test split salvato in: {errors_output_dir}")
+
+
         scaler = StandardScaler()
-        X_train_s = scaler.fit_transform(X_train)
-        X_test_s = scaler.transform(X_test)
+
+        X_train_s = pd.DataFrame(
+            scaler.fit_transform(X_train),
+            columns=feat_names,
+            index=X_train.index,
+        )
+
+        X_test_s = pd.DataFrame(
+            scaler.transform(X_test),
+            columns=feat_names,
+            index=X_test.index,
+        ) 
+
 
         model = lgb.LGBMClassifier(
             objective="binary",
@@ -419,7 +479,7 @@ class SpamClassifier(PipelineStep):
         }).sort_values("importance_mean", ascending=False)
 
         print("\nTop feature importance:")
-        print(importances.head(30).to_string(index=False))
+        print(importances.to_string(index=False))
 
         return {
             "model": model,
@@ -427,6 +487,20 @@ class SpamClassifier(PipelineStep):
             "feature_names": feat_names,
             "label_column": label_column,
             "threshold": float(threshold),
+
+
+            "model_name": "spam_lgbm",
+            "training_metadata": {
+                "source_csv": str(csv_path),
+                "label_column": label_column,
+                "threshold": threshold,
+                "test_size": test_size,
+                "random_state": random_state,
+                "n_train": int(len(X_train)),
+                "n_test": int(len(X_test)),
+                "errors_output_dir": str(errors_output_dir) if errors_output_dir else None,
+            },
+
             "classification_report": classification_report(
                 y_test, 
                 y_pred, 
@@ -452,6 +526,9 @@ class SpamClassifier(PipelineStep):
             "feature_names": result["feature_names"],
             "label_column": result.get("label_column", "spam_target_label"),
             "threshold": float(result.get("threshold", 0.5)),
+            "model_name": result.get("model_name", "spam_lgbm"),
+            "training_metadata": result.get("training_metadata", {}),
+
         }
         joblib.dump(artifact, output_path)
         print(f"[OK] Modello salvato in: {output_path}")
