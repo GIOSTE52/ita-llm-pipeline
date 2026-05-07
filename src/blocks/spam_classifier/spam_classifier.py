@@ -50,14 +50,15 @@ EXCLUDED_TRAINING_FEATURES = {
     # metadata di annotazione: utili per analisi, non per training
     "spam_subtype",
     "annotation_source",
-    "annotator",
-    "annotation_version",
+    "annotator", #
+    "annotation_version", #
     "url",
     "file_path",
     "date",
-    "dump",
+    "dump", #
     "language",
     "lang_score",
+    "minhash_cluster_size"
 
     # feature escluse 
     
@@ -273,7 +274,7 @@ class SpamClassifier(PipelineStep):
             "dump",
             "language",
             "language_score",
-
+            "minhash_cluster_size"
         }
 
         bad_used = [c for c in feat_names if c in forbidden_features]
