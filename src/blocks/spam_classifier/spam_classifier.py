@@ -58,7 +58,7 @@ EXCLUDED_TRAINING_FEATURES = {
     "dump", #
     "language",
     "lang_score",
-    "minhash_cluster_size"
+    "minhash_cluster_size",
 
     # feature escluse 
     
@@ -83,9 +83,8 @@ EXCLUDED_TRAINING_FEATURES = {
     "word_count",
     "whitespace_ratio",
     "ham_strength_score",
-    
-    
-
+    "noise_without_spam_intent",   
+    "avg_word_length",
     
 }
 
@@ -274,7 +273,7 @@ class SpamClassifier(PipelineStep):
             "dump",
             "language",
             "language_score",
-            "minhash_cluster_size"
+            "minhash_cluster_size",
         }
 
         bad_used = [c for c in feat_names if c in forbidden_features]
