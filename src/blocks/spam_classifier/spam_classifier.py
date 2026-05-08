@@ -65,9 +65,7 @@ EXCLUDED_TRAINING_FEATURES = {
     "short_line_count",
     "newline_count",
     "lang_is_ita",
-    "unsubscribe_keyword_hits",
     "currency_symbol_count",
-    "email_density",
     "email_count_text",
     "unique_domain_count_text",
     "promo_code_pattern_count",
@@ -85,6 +83,7 @@ EXCLUDED_TRAINING_FEATURES = {
     "ham_strength_score",
     "noise_without_spam_intent",   
     "avg_word_length",
+    "uppercase_token_count",
     
 }
 
