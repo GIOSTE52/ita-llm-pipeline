@@ -9,7 +9,7 @@ from typing import Dict, Iterable, Pattern, Sequence, Set
 DELIVERY_BRANDS: Set[str] = {
     "sda", "bartolini", "brt", "dpd", "gls",
     "poste delivery", "fedex", "ups", "dhl",
-    "poste italiane", "poste delivery", "amazon",
+    "poste italiane", "amazon",
     "mondial relay", "parcel", 
 }
 
@@ -156,6 +156,17 @@ SAFE_SECURITY_HAM_TERMS: Set[str] = {
     "se non sei stato tu",
     "puoi ignorare",
     "nessuna azione richiesta",
+    # nuovi
+    "accedi solo dal sito ufficiale",
+    "verifica dal sito ufficiale",
+    "non cliccare su link sospetti",
+    "non comunicare password",
+    "non comunicare il codice",
+    "non fornire dati personali",
+    "questa comunicazione non contiene link",
+    "non ti verrà chiesto il pin",
+    "non inserire credenziali",
+    "contatta il supporto ufficiale",
 }
 
 
@@ -185,7 +196,7 @@ PROMO_CODE_TERMS: Set[str] = {
     "codice", "coupon", "promo", "promocode", "voucher", "gift card",
 }
 
-PROMO_SYMBOLS = {"%", "€", "$", "!" , "$", "£",}
+PROMO_SYMBOLS = {"%", "€", "$", "!" , "£",}
 ACCENTED_CHARS = set("àèéìòù")
 
 SPAM_TERMS: Set[str] = set().union(
