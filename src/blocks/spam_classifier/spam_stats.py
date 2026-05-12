@@ -216,6 +216,17 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
     spam_keyword_hits = float(kw.spam_keywords)
     cta_keyword_hits = float(kw.cta_keywords)
 
+    money_keyword_hits = float(kw.money_keywords)
+    urgency_keyword_hits = float(kw.urgency_keywords)
+    
+    spam_keyword_density = _safe_div(spam_keyword_hits, float(word_count))
+    cta_keyword_density = _safe_div(cta_keyword_hits, float(word_count))
+    money_keyword_density = _safe_div(money_keyword_hits, float(word_count))
+    urgency_keyword_density = _safe_div(urgency_keyword_hits, float(word_count))
+    ham_business_density = _safe_div(ham_business_hits, float(word_count))
+
+
+
     ham_to_spam_keyword_ratio = (
         (ham_business_hits + 1.0) / (spam_keyword_hits + 1.0)
     )
@@ -404,6 +415,12 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "uppercase_token_count_clip": float(min(pat["uppercase_token_count"], 5)),
         "safe_security_ham_hits": safe_security_ham_hits,
         "safe_security_to_spam_ratio": (safe_security_ham_hits + 1.0) / (spam_keyword_hits + 1.0),
+        
+        "spam_keyword_density": spam_keyword_density,
+        "cta_keyword_density": cta_keyword_density,
+        "money_keyword_density": money_keyword_density,
+        "urgency_keyword_density": urgency_keyword_density,
+        "ham_business_density": ham_business_density,
 
 
 
@@ -495,6 +512,12 @@ FEATURE_COLUMNS: List[str] = [
     "uppercase_token_count_clip",
     "safe_security_ham_hits",
     "safe_security_to_spam_ratio",
+
+    "spam_keyword_density",
+    "cta_keyword_density",
+    "money_keyword_density",
+    "urgency_keyword_density",
+    "ham_business_density",
 
 
 

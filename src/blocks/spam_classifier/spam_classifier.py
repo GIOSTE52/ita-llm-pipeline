@@ -75,15 +75,19 @@ EXCLUDED_TRAINING_FEATURES = {
     "has_link_and_cta",
     "promo_symbol_count",
     "noise_score",
-    "promo_keyword_hits",
     "urgency_cta_url_combo",
     "digit_count",
     "word_count",
     "whitespace_ratio",
     "ham_strength_score",
-    "noise_without_spam_intent",   
-    "avg_word_length",
+    "noise_without_spam_intent",  
     "uppercase_token_count",
+
+    "unsubscribe_keyword_hits",
+    "money_keyword_hits",
+    "spam_keyword_hits",
+    "urgency_keyword_hits",
+
     
 }
 
