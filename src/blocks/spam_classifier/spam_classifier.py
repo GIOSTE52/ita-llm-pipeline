@@ -72,7 +72,6 @@ EXCLUDED_TRAINING_FEATURES = {
     "brand_keyword_hits",
     "symbol_pressure_score",
     "char_count",
-    "has_link_and_cta",
     "promo_symbol_count",
     "noise_score",
     "urgency_cta_url_combo",
@@ -82,13 +81,12 @@ EXCLUDED_TRAINING_FEATURES = {
     "ham_strength_score",
     "noise_without_spam_intent",  
     "uppercase_token_count",
-
+    
     "unsubscribe_keyword_hits",
-    "money_keyword_hits",
     "spam_keyword_hits",
     "urgency_keyword_hits",
+    "money_keyword_hits",
 
-    
 }
 
 DEFAULT_FEATURE_NAMES: List[str] = [
@@ -156,30 +154,40 @@ class SpamClassifier(PipelineStep):
                 [feats],
                 columns=self.feature_names,
             )
-
+            
             Xs = pd.DataFrame(
                 self.scaler.transform(X),
                 columns=self.feature_names,
+                index=X.index,
             )
-
-            proba = self.model.predict_proba(Xs)[0] 
-
             
+            proba = self.model.predict_proba(Xs)[0]
             spam_score = float(proba[1])
             pred_label = "spam" if spam_score >= self.threshold else "ham"
+
 
             doc.metadata["spam_pred_label"] = pred_label
             doc.metadata["spam_pred_score"] = round(spam_score, 6)
             yield doc
 
     def _predict_from_features(self, feats: List[float]) -> Tuple[str, float]:
-        X = pd.DataFrame([feats], columns=self.feature_names)
-        Xs = self.scaler.transform(X)
-        Xs = pd.DataFrame(Xs, columns=self.feature_names)
+        X = pd.DataFrame(
+            [feats],
+            columns=self.feature_names,
+        )
+
+        Xs = pd.DataFrame(
+            self.scaler.transform(X),
+            columns=self.feature_names,
+            index=X.index,
+        )
+
         proba = self.model.predict_proba(Xs)[0]
         spam_score = float(proba[1])
         pred_label = "spam" if spam_score >= self.threshold else "ham"
-        return pred_label, spam_score 
+
+        return pred_label, spam_score
+
 
 
     def predict_doc(self, doc) -> Tuple[str, float]:
