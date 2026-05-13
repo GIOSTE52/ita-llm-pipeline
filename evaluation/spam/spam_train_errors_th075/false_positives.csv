@@ -1,0 +1,8 @@
+doc_id,spam_target_label,true_label,pred_label,spam_probability,threshold,is_error,error_type
+000-000-000-199,ham,ham,spam,0.8122622518746196,0.75,True,false_positive
+000-000-000-004,ham,ham,spam,0.9498672841893284,0.75,True,false_positive
+000-000-001-294,ham,ham,spam,0.7528247363239147,0.75,True,false_positive
+000-000-000-140,ham,ham,spam,0.9235764801789769,0.75,True,false_positive
+000-000-000-820,ham,ham,spam,0.7697830583037535,0.75,True,false_positive
+000-000-001-778,ham,ham,spam,0.8820252776919506,0.75,True,false_positive
+000-000-000-209,ham,ham,spam,0.9295268873775511,0.75,True,false_positive

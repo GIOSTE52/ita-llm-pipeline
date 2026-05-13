@@ -59,34 +59,43 @@ EXCLUDED_TRAINING_FEATURES = {
     "language",
     "lang_score",
     "minhash_cluster_size",
+    "lang_is_ita",
+    
+
+    # costanti
+
+    "noise_without_spam_intent",
+    "unsubscribe_keyword_hits",
+
 
     # feature escluse 
     
-    "short_line_count",
-    "newline_count",
-    "lang_is_ita",
-    "currency_symbol_count",
-    "email_count_text",
-    "unique_domain_count_text",
-    "promo_code_pattern_count",
-    "brand_keyword_hits",
-    "symbol_pressure_score",
     "char_count",
-    "promo_symbol_count",
-    "noise_score",
-    "urgency_cta_url_combo",
     "digit_count",
-    "word_count",
-    "whitespace_ratio",
-    "ham_strength_score",
-    "noise_without_spam_intent",  
+    "short_line_count",
+    "short_token_count",
+    "amount_pattern_count",
     "uppercase_token_count",
+    "shortner_url_count",
+    "word_count",
+    "newline_count",
+  
+    "email_count_text",
+    "promo_symbol_count",
+    "brand_plus_link_score",
+    "has_money_and_cta",
+    "has_account_and_security",
+    "has_delivery_and_link",
+    "has_brand_and_link",
+    "has_urgency_and_cta",
+    "urgency_cta_url_combo",
+    "money_cta_combo",
+    "has_admin_doc_and_no_url",
+    "unique_url_count_text",
+    "unique_domain_count_text",
+    "has_technical_business_and_no_cta",
+    "business_signature_hits"
     
-    "unsubscribe_keyword_hits",
-    "spam_keyword_hits",
-    "urgency_keyword_hits",
-    "money_keyword_hits",
-
 }
 
 DEFAULT_FEATURE_NAMES: List[str] = [
