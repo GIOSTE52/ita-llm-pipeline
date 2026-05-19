@@ -1,119 +1,234 @@
-# 📊 Guida: Valutazione del Modello di Classificazione
+# Valutazione dei Modelli
 
-## Panoramica
+Questo documento spiega come valutare i modelli usati dalla pipeline:
 
-Hai due modi per valutare il classificatore di qualità:
+- classificatore di qualità: `models/lgbm_quality_model.joblib`
+- classificatore spam: `models/spam_lgbm.joblib`
 
-### 1. **Script Python** (Consigliato per uso rapido)
+## Comando rapido
+
+Il comando consigliato è:
 
 ```bash
-python scripts/evaluate_model.py \
-    --model models/lgbm_quality_model.joblib \
-    --test-csv data/test/dataset_test.csv \
-    --output-dir output/evaluation \
-    --threshold 0.65 \
-    --compare-models
+python3 scripts/evaluate_model.py \
+  --model models/lgbm_quality_model.joblib \
+  --output-dir evaluation \
+  --compare-models
 ```
 
-**Parametri:**
-- `--model`: Percorso al modello addestrato (.joblib)
-- `--test-csv`: Percorso al CSV con feature e label
-- `--output-dir`: (Opzionale) Directory per salvare report JSON, CSV e HTML
-- `--threshold`: (Opzionale) Soglia di decisione (default 0.5)
-- `--label-column`: (Opzionale) Nome colonna label nel CSV (default "label")
-- `--compare-models`: (Opzionale) Esegue anche la cross validation comparando LightGBM con altri modelli
-- `--comparison-csv`: (Opzionale) CSV etichettato da usare per la cross validation; se omesso usa `--test-csv`
-- `--cv-folds`: (Opzionale) Numero di fold per il benchmark (default `5`)
-- `--cv-models`: (Opzionale) Sottoinsieme di modelli da confrontare (`lightgbm`, `random_forest`, `extra_trees`, `logistic_regression`)
+Lo script prova a recuperare automaticamente il test set dai metadati salvati nel modello. Per il modello attuale il test set registrato è:
 
-**Output:**
-- Stampa report a schermo con metriche, confusion matrix, feature importance
-- Tabella comparativa tra modelli con differenze rispetto al baseline LightGBM
-- Genera `evaluation_report.json` - Dati strutturati per ulteriore analisi
-- Genera `feature_importance.csv` - Importanza delle feature in formato CSV
-- Genera `evaluation_report.html` - Report interattivo con grafici ROC e Precision-Recall
+```text
+data/splits/doc_stats_test.csv
+```
 
----
+Se il recupero automatico non funziona, passare il CSV esplicitamente:
 
-### 2. **Programmatico** (Per integrazione nel codice)
+```bash
+python3 scripts/evaluate_model.py \
+  --model models/lgbm_quality_model.joblib \
+  --test-csv data/splits/doc_stats_test.csv \
+  --output-dir evaluation
+```
+
+## Parametri principali
+
+| Parametro | Significato |
+| --- | --- |
+| `--model` | Percorso del modello `.joblib` da valutare. |
+| `--test-csv` | CSV di test con feature e label. Se omesso, lo script usa il test split registrato nel modello. |
+| `--output-dir` | Directory in cui salvare JSON, CSV e HTML. |
+| `--threshold` | Soglia decisionale. Se omessa, usa quella salvata nel modello; in mancanza usa `0.65`. |
+| `--label-column` | Nome della colonna label. Default: `label`. |
+| `--compare-models` | Esegue anche un confronto in cross-validation tra modelli. |
+| `--comparison-csv` | Dataset etichettato per la cross-validation. Se omesso, usa il dataset sorgente registrato nel modello oppure il test CSV. |
+| `--cv-folds` | Numero di fold per la cross-validation. Default: `5`. |
+| `--cv-models` | Sottoinsieme di modelli da confrontare: `lightgbm`, `random_forest`, `extra_trees`, `logistic_regression`. |
+
+## Formato del CSV richiesto
+
+Il CSV di valutazione deve contenere:
+
+- `doc_id`, utile per tracciare i documenti
+- `label`, con valori `good` o `bad`
+- tutte le feature attese dal modello, definite in `DEFAULT_FEATURE_NAMES` in `src/blocks/classifiers.py`
+
+Esempio semplificato:
+
+```csv
+doc_id,label,language_score,length,word_count,text_entropy,unique_word_ratio,...
+doc_001,good,0.98,1234,210,4.52,0.71,...
+doc_002,bad,0.91,456,72,2.10,0.32,...
+```
+
+Gli split prodotti dallo script di training qualità sono:
+
+```text
+data/splits/doc_stats_train.csv
+data/splits/doc_stats_val.csv
+data/splits/doc_stats_test.csv
+```
+
+Lo script `scripts/training_lgbmclassifier.py` usa uno split:
+
+| Split | Quota |
+| --- | --- |
+| Train | 70% |
+| Validation | 15% |
+| Test | 15% |
+
+Il modello viene addestrato sul train set, validato sul validation set e valutato sul test set.
+
+## Output generati
+
+Con `--output-dir evaluation`, la valutazione qualità genera:
+
+```text
+evaluation/
+├── evaluation_report.json
+├── evaluation_report.html
+└── feature_importance.csv
+```
+
+I file hanno questi ruoli:
+
+| File | Contenuto |
+| --- | --- |
+| `evaluation_report.json` | Metriche, confusion matrix, metadati modello, top feature e confronto modelli se richiesto. |
+| `feature_importance.csv` | Permutation importance delle feature. |
+| `evaluation_report.html` | Report interattivo con metriche, confusion matrix, feature importance, ROC curve e Precision-Recall curve. |
+
+## Metriche
+
+Le metriche principali sono:
+
+| Metrica | Interpretazione |
+| --- | --- |
+| Accuracy | Percentuale totale di predizioni corrette. |
+| Balanced Accuracy | Accuracy bilanciata tra classi, utile se `good` e `bad` sono sbilanciate. |
+| Precision | Quanto sono affidabili le predizioni positive. |
+| Recall | Quanti esempi positivi reali vengono recuperati. |
+| F1-score | Media armonica tra precision e recall. |
+| ROC-AUC | Capacità del modello di separare le classi al variare della soglia. |
+
+Nel classificatore qualità la classe positiva è `good`, perché in `LABEL_MAP`:
 
 ```python
-from blocks.classifiers import QualityClassifier
-
-# Carica il modello
-classifier = QualityClassifier(
-    model_path="models/lgbm_quality_model.joblib",
-    threshold=0.65
-)
-
-# Valuta su un dataset di test
-result = classifier.evaluate(
-    csv_path="data/test/dataset_test.csv",
-    label_column="label",
-    output_dir="output/evaluation"
-)
-
-# Accedi alle metriche
-print(f"Accuracy: {result['accuracy']}")
-print(f"ROC-AUC: {result['roc_auc']}")
-print(f"Top features: {result['top_features']}")
+LABEL_MAP = {"bad": 0, "good": 1}
 ```
 
----
+## Confusion matrix
 
-## Formato del CSV di Test
+La matrice di confusione prodotta da `src/blocks/evaluation.py` segue questa convenzione:
 
-Il CSV deve contenere:
-1. **Colonne di feature** - Contiene le features elencate in `DEFAULT_FEATURE_NAMES` all'interno di `classifiers.py`
-2. **Colonna label** - Con valori "good" o "bad"
-3. **Colonna doc_id** - Per tracciare i documenti
-
-**Esempio:**
-```csv
-doc_id,length,white_space_ratio,non_alpha_digit_ratio,...,label
-doc_001,1234,0.15,0.05,...,good
-doc_002,456,0.22,0.10,...,bad
-...
+```text
+                Predicted bad   Predicted good
+Actual bad          TN              FP
+Actual good         FN              TP
 ```
 
----
+Significato operativo:
++ `TN` sta per True Negative, ovvero documenti `bad` classificati correttamente come `bad`
++ `FP` sta per False Negative, ovvero documenti `bad` lasciati passare come `good`
++ `FN` sta per False Negative, ovvero documenti `good` scartati per errore come `bad`
++ `TP` sta per True Positive, ovvero documenti `good` classificati correttamente come `good`
 
-## Metriche Calcolate
+Per la pipeline, gli errori hanno impatti diversi:
 
-### Globali
-- **Accuracy**: Percentuale di predizioni corrette
-- **Balanced Accuracy**: Accuracy pesata per classi sbilanciate
-- **F1-Score**: Media armonica di precision e recall
-- **ROC-AUC**: Area sotto la curva ROC (0.5 = random, 1.0 = perfetto)
+- molti `FP` significano che documenti scadenti restano nel corpus finale
+- molti `FN` significano che documenti validi vengono scartati
 
-### Confusion Matrix
+La soglia `0.65` controlla questo compromesso.
+
+## Risultati attuali
+
+Il report attuale in `evaluation/evaluation_report.json` indica:
+
+| Metrica | Valore |
+| --- | ---: |
+| Accuracy | `0.9189` |
+| Balanced Accuracy | `0.8813` |
+| F1-score | `0.8529` |
+| ROC-AUC | `0.9705` |
+| Threshold | `0.65` |
+
+Confusion matrix:
+
+```text
+                Predicted bad   Predicted good
+Actual bad          2251             59
+Actual good          208            774
 ```
-              Predicted:Bad  Predicted:Good
-Actual:Bad         TN              FP
-Actual:Good        FN              TP
+
+Le prime feature per permutation importance nel report attuale sono:
+
+1. `avg_line_length`
+2. `stopword_ratio`
+3. `language_score`
+4. `avg_word_length`
+5. `exclamation_ratio`
+
+Con `--compare-models`, il report attuale registra come miglior modello per ROC-AUC medio `Extra Trees`, con ROC-AUC medio `0.9869` e F1 medio `0.8624`. Questo non sostituisce automaticamente il modello in pipeline: indica solo che vale la pena confrontare i modelli prima di un eventuale riaddestramento.
+
+## Notebook report.ipynb
+
+Il notebook `notebooks/report.ipynb` fornisce un'analisi interattiva del modello qualità.
+
+Usa lo stesso modello e lo stesso test split registrato nel file `.joblib`, quindi rimane coerente con:
+
+```bash
+python3 scripts/evaluate_model.py \
+  --model models/lgbm_quality_model.joblib \
+  --output-dir evaluation
 ```
 
-### Feature Importance
-- **Importanza Media**: Media della variazione di performance rimuovendo ogni feature
-- **Std Dev**: Deviazione standard dell'importanza
+Il notebook include:
 
-### Curve di Valutazione
-- **ROC Curve**: Trade-off tra True Positive Rate e False Positive Rate
-- **Precision-Recall Curve**: Trade-off tra Precision e Recall
+- caricamento del modello e dei metadati di training
+- metriche globali e metriche per classe
+- confusion matrix
+- permutation importance delle feature
+- correlation matrix
+- ROC curve e Precision-Recall curve
+- confronto LGBM contro LogisticRegression
+- controlli di data leakage
+- SHAP summary plot e SHAP bar plot
 
----
+Per avviarlo:
 
-## Interpretazione dei Risultati
+```bash
+jupyter notebook notebooks/report.ipynb
+```
 
-| Metrica | Intervallo | Interpretazione |
-|---------|-----------|-----------------|
-| Accuracy | 0–1 | % di predizioni corrette. Alto = buono. |
-| Balanced Acc | 0–1 | Come Accuracy ma pesata. Utile con classi sbilanciate. |
-| ROC-AUC | 0–1 | 0.5 = casuale, 1.0 = perfetto. >0.7 = buono. |
-| F1-Score | 0–1 | Bilancia precision e recall. 1.0 = perfetto. |
-| Confusion Matrix | - | TN e TP grandi = buono. FP e FN piccoli = buono. |
+## Confronto modelli
 
----
+La cross-validation del classificatore qualità si attiva con:
+
+```bash
+python3 scripts/evaluate_model.py \
+  --model models/lgbm_quality_model.joblib \
+  --output-dir evaluation \
+  --compare-models
+```
+
+I modelli supportati sono:
+
+- `lightgbm`
+- `random_forest`
+- `extra_trees`
+- `logistic_regression`
+
+Per limitarla a un sottoinsieme:
+
+```bash
+python3 scripts/evaluate_model.py \
+  --model models/lgbm_quality_model.joblib \
+  --output-dir evaluation \
+  --compare-models \
+  --cv-models lightgbm logistic_regression
+```
+
+Il confronto serve a verificare se LightGBM è ancora una buona scelta rispetto a baseline o modelli alternativi. Non cambia il modello salvato in `models/`.
 
 ## Esempio Completo
 
@@ -146,55 +261,84 @@ python scripts/evaluate_model.py \
 
 ---
 
-## Risoluzione dei Problemi
+## Valutazione modello spam
 
-### "Colonne mancanti nel CSV"
-- Verifica che il CSV contenga tutte le feature richieste
-- Controlla i nomi delle colonne
-- Usa `DEFAULT_FEATURE_NAMES` come riferimento
+Il modello spam è valutato con `scripts/spam/evaluate_spam_model.py`.
 
-### "Valori label non validi"
-- Il CSV deve contenere solo "good" o "bad" nella colonna label
-- Non accetta numeri (usa la mappa `LABEL_MAP = {"bad": 0, "good": 1}`)
+Il parametro `--test-csv` deve puntare a un CSV di feature spam etichettato, per esempio il file `spam_test_features.csv` prodotto dal training spam. Esempio:
 
-### "Feature mancanti per doc"
-- Se durante valutazione un documento non ha feature, viene saltato
-- Pulisci il CSV da righe incomplete
-
----
-
-## Salvare e Condividere i Risultati
-
-I report vengono salvati in tre formati:
-
-1. **JSON** - Dati strutturati per analisi programmatica
-   ```python
-   import json
-   with open("evaluation_report.json") as f:
-       data = json.load(f)
-   ```
-
-2. **CSV** - Feature importance in formato tabulare per Excel/Sheets
-
-3. **HTML** - Report interattivo professionale per presentazioni
-
----
-
-## Personalizzazione Avanzata
-
-E' possibile calcolare metriche personalizzate:
-
-```python
-class MyQualityClassifier(QualityClassifier):
-    def evaluate(self, csv_path, **kwargs):
-        # Valutazione standard
-        result = super().evaluate(csv_path, **kwargs)
-        
-        # Aggiungi metriche custom
-        result['my_metric'] = calculate_my_metric(...)
-        
-        return result
+```bash
+python3 scripts/spam/evaluate_spam_model.py \
+  --model models/spam_lgbm.joblib \
+  --test-csv path/al/tuo/spam_test_features.csv \
+  --output-dir evaluation/spam/train_evaluation \
+  --label-column spam_target_label \
+  --threshold 0.75 \
+  --threshold-sweep 0.40 0.50 0.60 0.70 0.75 0.80 0.90 \
+  --compare-models \
+  --comparison-csv output/feature/spam_doc_features.csv
 ```
 
----
+La label spam usa questa convenzione:
 
+```text
+ham  -> 0
+spam -> 1
+```
+
+Output principali:
+
+```text
+evaluation/spam/train_evaluation/
+├── spam_evaluation_report.json
+├── spam_predictions.csv
+├── spam_false_positives.csv
+├── spam_false_negatives.csv
+├── spam_feature_importance.csv
+├── spam_features_strong.csv
+├── spam_features_to_review.csv
+├── spam_features_negative_importance.csv
+├── spam_threshold_sweep.csv
+├── spam_model_comparison_cv.csv
+└── spam_model_comparison_report.json
+```
+
+Nel repository sono già presenti report generati in:
+
+```text
+evaluation/spam/train_evaluation/
+evaluation/spam/test_evaluation/
+```
+
+I file `spam_threshold_sweep.csv`, `spam_model_comparison_cv.csv` e `spam_model_comparison_report.json` vengono generati solo se si usano rispettivamente `--threshold-sweep` e `--compare-models`.
+
+Nel filtro operativo della pipeline, un documento viene scartato come spam solo se:
+
+1. il modello predice `spam`
+2. la probabilità supera la soglia
+3. sono presenti evidenze forti di spam
+
+Se il modello sospetta spam ma mancano evidenze forti, il documento non viene scartato subito e passa alla fase di classificazione qualità.
+
+## Errori comuni
+
+### CSV di test non trovato
+
+Usare il path corretto:
+
+```bash
+python3 scripts/evaluate_model.py \
+  --model models/lgbm_quality_model.joblib \
+  --test-csv data/splits/doc_stats_test.csv \
+  --output-dir evaluation
+```
+
+### Colonne mancanti nel CSV
+
+Controllare che il CSV contenga tutte le feature richieste da:
+
+```text
+src/blocks/classifiers.py
+```
+
+In particolare, verificare `DEFAULT_FEATURE_NAMES`.
