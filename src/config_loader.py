@@ -46,17 +46,14 @@ def get_config():
         DATA_DIR = os.path.join(ROOT_DIR, "data")
         INPUT_SUB_PATTERN = "train/*.jsonl"
         print("MODALITÀ IMPOSTATA: REPOSITORY")
-    # ------------------------------
     # --- LOGICA DINAMICA TASK ---
     full_search_path = os.path.join(DATA_DIR, INPUT_SUB_PATTERN)
     found_files = glob.glob(full_search_path)
     num_tasks = args.tasks or len(found_files)
-    # ----------------------------
 
     
     
     # 2. Sottocartelle (Default calcolati)
-# 2. Sottocartelle (Logica: Ambiente > Argomento > Default)
     config = {
         "DATA_DIR": DATA_DIR,
         "INPUT_SUB_PATTERN": INPUT_SUB_PATTERN,
@@ -70,7 +67,6 @@ def get_config():
     }
 
     # 3. Creazione automatica cartelle (gestendo il file del modello)
-# Creazione automatica cartelle
     for key, path in config.items():
         if key in ["MAX_WORKERS", "NUM_TASKS"]:
             continue
