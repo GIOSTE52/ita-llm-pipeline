@@ -94,7 +94,6 @@ EXCLUDED_TRAINING_FEATURES = {
     "unique_url_count_text",
     "unique_domain_count_text",
     "has_technical_business_and_no_cta",
-    "business_signature_hits"
     
 }
 

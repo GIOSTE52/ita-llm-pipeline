@@ -1,0 +1,17 @@
+feature,importance_mean,importance_std
+spam_intent_score,0.0011742560937108236,0.0015662489500701303
+url_count_text,0.0006218699112053195,0.0007616319844214579
+account_keyword_hits,0.00039095982486971883,0.0007819196497394377
+cta_plus_url_score,0.0,0.0
+ham_admin_doc_hits,0.0,0.0
+ham_technical_business_hits,0.0,0.0
+business_signature_hits,0.0,0.0
+has_link_and_cta,0.0,0.0
+shortener_url_count,0.0,0.0
+digit_run_count_clip,0.0,0.0
+promo_keyword_hits,0.0,0.0
+spam_keyword_hits,0.0,0.0
+promo_code_pattern_count,0.0,0.0
+security_keyword_hits,0.0,0.0
+delivery_keyword_hits,0.0,0.0
+ham_business_hits,0.0,0.0
