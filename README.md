@@ -1,6 +1,6 @@
 # ITA-LLM-Pipeline
 
-Pipeline di pulizia e classificazione per corpora italiani basata su DataTrove. Il progetto legge shard JSONL, filtra i documenti non italiani, estrae feature statistiche, classifica la qualità con LightGBM e salva sia gli output validi sia gli scarti organizzati per tipologia.
+Pipeline di pulizia e classificazione per corpus italiani basata su DataTrove. Il progetto legge shard JSONL, filtra i documenti non italiani, rimuove contenuti spam, estrae feature statistiche, classifica la qualità con LightGBM e salva sia gli output validi sia gli scarti organizzati per tipologia.
 
 ## Funzionalità
 
@@ -16,118 +16,152 @@ Pipeline di pulizia e classificazione per corpora italiani basata su DataTrove. 
 
 ```text
 ita-llm-pipeline/
+│
+├── Dockerfile                          # Build immagine Docker (Python 3.12-slim)
+├── docker-compose.yml                  # Orchestrazione servizi
+├── requirements.txt                    # Dipendenze Python
+├── .gitignore                          # Esclusioni Git
+├── README.md                           # Questa guida
+├── VALUTAZIONE_MODELLO.md              # Guida valutazione e metriche modelli
+│
 ├── configs/
-│   ├── default.conf
-│   ├── gabriele.conf
-│   ├── silvio.conf
-│   └── stefano.conf
+│   └── default.conf                    # Variabili ambiente e path
+│
 ├── data/
-│   ├── dataset/
-│   ├── spam/
-│   │   ├── test/
-│   │   ├── train/
+│   ├── dataset/                        # Dataset principale (JSONL)
+│   ├── train/                          # Shard training per pipeline
+│   ├── test/                           # Shard test
+│   ├── spam/                           # Dataset annotati spam
 │   │   ├── spam_data.jsonl
 │   │   ├── spam_dataset_300.jsonl
-│   │   └── tutti_gli_spam.jsonl
-│   ├── splits/
-│   ├── test/
-│   ├── train/
-│   └── warc_paths
-├── evaluation/
-│   ├── spam/
-│   ├── evaluation_report.html
-│   ├── evaluation_report.json
-│   └── feature_importance.csv
+│   │   ├── tutti_gli_spam.jsonl
+│   │   ├── test/
+│   │   └── train/
+│   ├── splits/                         # CSV split dataset per training
+│   │   ├── doc_stats_test.csv
+│   │   ├── doc_stats_train.csv
+│   │   └── doc_stats_val.csv
+│   └── warc_paths                      # Path WARC per estrazione shard del web
+│
 ├── models/
-│   ├── lgbm_quality_model.joblib
-│   └── spam_lgbm.joblib
-├── my_web_dump_output/
+│   ├── lgbm_quality_model.joblib       # Classificatore qualità LightGBM
+│   └── spam_lgbm.joblib                # Classificatore spam LightGBM
+│
+├── evaluation/
+│   ├── evaluation_report.json          # Report metriche qualità
+│   ├── evaluation_report.html          # Report interattivo qualità
+│   ├── feature_importance.csv          # Feature importance qualità
+│   └── spam/                           # Valutazione modello spam
+│
+├── output/                             # Generato da esecuzione
+│   ├── italiano_pulito_*.jsonl         # Documenti processati
+│   ├── feature/                        # CSV aggregati
+│   ├── inspection/                     # Analisi scarti
+│   └── rejected/                       # Documenti scartati per fase
+│
+├── logs/                               # Log timestamped di ogni esecuzione
+│
 ├── notebooks/
-├── scripts/
-│   ├── spam/
-│   │   └── evaluate_spam_model.py
-│   ├── evaluate_model.py
-│   ├── training_lgbmclassifier.py
-│   ├── training_spam_lgbmclassifier.py
-│   └── web_extracting_pipeline.py
+│   └── report.ipynb                    # Analisi interattiva modello QualityClassifier
+│
+├── my_web_dump_output/                 # Output web_extracting_pipeline.py
+│
 ├── src/
-│   ├── main.py
-│   ├── config_loader.py
-│   ├── pipeline_factory.py
+│   ├── main.py                         # Entry point pipeline
+│   ├── config_loader.py                # Caricamento configurazione
+│   ├── pipeline_factory.py             # Factory pattern
 │   ├── blocks/
-│   │   ├── __init__.py
-│   │   ├── classifiers.py
-│   │   ├── evaluation.py
-│   │   ├── filters.py
-│   │   ├── readers.py
-│   │   ├── stats.py
-│   │   ├── writers.py
+│   │   ├── classifiers.py              # Classificatori LightGBM
+│   │   ├── evaluation.py               # Valutazione modelli
+│   │   ├── filters.py                  # Filtri lingua/contenuto
+│   │   ├── readers.py                  # Reader JSONL
+│   │   ├── stats.py                    # Statistiche documenti
+│   │   ├── writers.py                  # Writer JSONL
 │   │   └── spam_classifier/
-│   │       ├── __init__.py
 │   │       ├── spam_classifier.py
 │   │       ├── spam_evaluation.py
 │   │       ├── spam_keywords.py
 │   │       └── spam_stats.py
 │   └── utils/
-│       ├── __init__.py
-│       ├── counter_data.py
-│       ├── csv_aggregator.py
-│       ├── fix_rpDataset.py
-│       └── output_organizer.py
-├── .gitignore
-├── Dockerfile
-├── README.md
-├── VALUTAZIONE_MODELLO.md
-├── docker-compose.yml
-└── requirements.txt
+│       ├── csv_aggregator.py           # Aggregazione CSV
+│       └── output_organizer.py         # Organizzazione output
+│
+└── scripts/
+    ├── evaluate_model.py               # Valutazione qualità
+    ├── training_lgbmclassifier.py      # Training qualità
+    ├── training_spam_lgbmclassifier.py # Training spam
+    ├── web_extracting_pipeline.py      # Estrazione web
+    └── spam/
+        └── evaluate_spam_model.py      # Valutazione spam
+
 ```
 
 ## Requisiti
 
 ### Esecuzione locale
 
-- Python 3.12+
-- `pip`
-- Dipendenze di `requirements.txt`
+- **Python 3.12+** (consigliato: 3.12.0+)
+- **pip** (gestione pacchetti)
+- **Dipendenze di `requirements.txt`** (datatrove, lightgbm, spacy, fasttext...)
+- **Spazio disco**: 10+ GB (modelli, dati, output)
 
 ### Esecuzione Docker
 
-- Docker
-- Docker Compose plugin (`docker compose`)
+- **Docker** 20.10+
+- **Docker Compose** (plugin `docker compose`)
+- **Spazio disco**: 15+ GB (incluso volume HuggingFace cache)
 
 ## Configurazione
 
-La pipeline usa argomenti CLI e variabili d'ambiente. I file `.conf` in `configs/` servono a valorizzare le variabili base, soprattutto in Docker.
+La pipeline legge configurazione da **3 fonti** (in ordine di precedenza):
+1. **Argomenti CLI** (`--root-dir`, `--output-dir`, etc.)
+2. **File `.conf`** in `configs/` (caricato con `--config`)
+3. **Default interni** nel codice
 
-Variabili e valori principali:
+### Variabili Configurazione Principali
 
-| Variabile | Significato | Default effettivo |
+| Variabile | Significato | Default |
 | --- | --- | --- |
-| `ROOT_DIR` | root del progetto | `/app` in Docker, cartella corrente in locale |
-| `DATA_DIR` | directory di input | `ROOT_DIR/data` |
-| `OUTPUT_DIR` | directory di output | `ROOT_DIR/output` |
-| `REJECTED_DIR` | scarti della pipeline | `OUTPUT_DIR/rejected` |
-| `FEATURE_DIR` | CSV e artefatti derivati | `OUTPUT_DIR/feature` |
-| `MODEL_PATH` | cartella con i modelli | `ROOT_DIR/models` |
-| `MAX_WORKERS` | numero worker DataTrove | default `cpu_count() - 2`, minimo `1` |
+| `ROOT_DIR` | Radice progetto | `/app` (Docker), `./` (locale) |
+| `DATA_DIR` | Directory input | `ROOT_DIR/data` |
+| `OUTPUT_DIR` | Directory output | `ROOT_DIR/output` |
+| `REJECTED_DIR` | Scarti pipeline | `OUTPUT_DIR/rejected` |
+| `FEATURE_DIR` | CSV aggregati | `OUTPUT_DIR/feature` |
+| `MODEL_PATH` | Cartella modelli | `ROOT_DIR/models` |
+| `MAX_WORKERS` | Worker DataTrove | `cpu_count() - 2` (min 1) |
+| `INPUT_SUB_PATTERN` | Pattern file input | `train/*.jsonl` |
+| `THRESHOLD_SPAM` | Soglia spam (0-1) | `0.75` |
+| `THRESHOLD_QUALITY` | Soglia qualità (0-1) | `0.65` |
+| `LANG_THRESHOLD` | Soglia lingua (0-1) | `0.75` |
+
+### File Configurazione Disponibili
+
+In `configs/`:
+- **`default.conf`** - Configurazione di base (paths Docker)
+
+**Nota**: Il file `default.conf` usa path Docker. Per esecuzione locale, sovrascrivere con argomenti CLI.
 
 ## Gestione Dataset (Interno vs Esterno)
-- `config_loader.get_config()` usa come pattern input fisso `INPUT_SUB_PATTERN = train/*.jsonl`, bisogna modificarlo manualmente per cambiare la scelta del 
+
+`config_loader.get_config()` usa come pattern input fisso `INPUT_SUB_PATTERN = train/*.jsonl`. Per cambiare la scelta del dataset in input, bisogna modificarlo manualmente nel file `src/config_loader.py`.
+
 ### 1. Utilizzo Dataset della Repository (Default)
+
 Per utilizzare i file contenuti in `data/train/*.jsonl`:
 - Nel file `src/config_loader.py`, imposta: `USE_EXTERNAL_DATA = False`.
 - (Opzionale) Nel `docker-compose.yml`, puoi lasciare commentata la riga del volume esterno.
 
 ### 2. Utilizzo Dataset Esterno (Locale)
+
 Per puntare a una cartella esterna (es. un disco rigido o la Scrivania) senza spostare i file:
 1. **Docker Compose**: Decommenta o aggiungi la riga del volume nel servizio `pipeline`:
    ```yaml
    volumes:
      - /tuo/percorso/sul/pc:/app/external_data:ro
+   ```
 
-Note operative:
+### Note Operative
 
-dataset in input.
 - `NUM_TASKS` viene calcolato contando i file che matchano `DATA_DIR/INPUT_SUB_PATTERN`.
 - `--tasks` viene parsato dalla CLI e sovrascrive `NUM_TASKS` se specificato.
 
@@ -164,25 +198,69 @@ oppure
 docker compose up --build
 ```
 
+## Quick Start (Esecuzione Rapida)
 
-## Pipeline attuale
+### 1️ Primo Avvio Locale (5 minuti)
+
+```bash
+# Attiva environment
+source venv/bin/activate
+
+# Esegui pipeline con config di default
+python3 src/main.py --config configs/default.conf
+
+# (Oppure con override path locale)
+python3 src/main.py \
+  --root-dir . \
+  --data-dir ./data/train \
+  --output-dir ./output \
+  --workers 4
+```
+
+L'esecuzione genererà file in `output/` e log in `logs/`.
+
+### 2️ Analisi Risultati con Notebook (2 minuti)
+
+```bash
+# Apri Jupyter
+jupyter notebook notebooks/report.ipynb
+```
+
+Il notebook carica automaticamente il modello `models/lgbm_quality_model.joblib` e:
+- Calcola metriche di valutazione
+- Mostra feature importance
+- Visualizza confusion matrix
+- Genera curve ROC e Precision-Recall
+- Analizza SHAP values per interpretabilità
+
+### 3️ Valutazione Modelli (1 minuto)
+
+```bash
+python3 scripts/evaluate_model.py \
+  --model models/lgbm_quality_model.joblib \
+  --output-dir evaluation \
+  --compare-models
+```
+
+Genera report HTML interattivo in `evaluation/evaluation_report.html`.
 
 `build_italian_cleaning_pipeline()` costruisce questi step:
 
-1. `get_jsonl_reader(data_dir, pattern)`
-2. `get_language_filter(rejected_dir, threshold=0.75, languages="it")`
-3. `SpamFeatureExtractor()`
-4. `SpamFeatureCsvWriter(... , csv_filename="spam_doc_features.csv")`
-5. `SpamFilter(model_path, ... , threshold=0.75)`
-6. `DocStatsCsv(..., csv_filename="doc_stats_per_file.csv", groups_to_compute=["summary"])`
-7. `ItalianClassification(..., threshold=0.65)`
-8. `get_jsonl_writer(output_dir)`
+1. `get_jsonl_reader(data_dir, pattern)` - Legge file JSONL
+2. `get_language_filter(rejected_dir, threshold=0.75, languages="it")` - Filtra italiano
+3. `SpamFeatureExtractor()` - Estrae feature spam
+4. `SpamFeatureCsvWriter(... , csv_filename="spam_doc_features.csv")` - Salva feature spam
+5. `SpamFilter(model_path, ... , threshold=0.75)` - Classifica spam
+6. `DocStatsCsv(..., csv_filename="doc_stats_per_file.csv", groups_to_compute=["summary"])` - Estrae feature qualità
+7. `ItalianClassification(..., threshold=0.65)` - Classifica qualità
+8. `get_jsonl_writer(output_dir)` - Salva documenti validi
 
 Dopo l'esecuzione della pipeline, `src/main.py` esegue anche:
 
 1. aggregazione dei CSV per-rank in `FEATURE_DIR/doc_stats_per_file.csv`
-2. rimozione dei file temporanei `rank_*_doc_stats_per_file.csv`
-3. analisi finale degli output con `output_classification(REJECTED_DIR, OUTPUT_DIR)`
+2. aggregazione dei CSV spam in `FEATURE_DIR/spam_doc_features.csv`
+3. rimozione dei file temporanei `rank_*_*_.csv`
+4. analisi finale degli output con `output_classification(REJECTED_DIR, OUTPUT_DIR)`
 
 ## Output prodotti
 
@@ -217,42 +295,68 @@ output/
 - `unique_word_ratio`
 - `consecutive_punctuation_count`
 
-## Testing
+## Analisi Risultati
 
-Le suite `pytest` coperte dal repository sono:
+### Interpretare gli Output
 
-- `tests/test_main.py`: parsing CLI, config dinamica, wiring di `main()`
-- `tests/test_pipeline_components.py`: reader, writer, filtro lingua, stats, spam feature extraction, pipeline factory
-- `tests/test_evaluate_model.py`: utility e orchestrazione di `scripts/evaluate_model.py`
+Dopo l'esecuzione della pipeline, i documenti vengono classificati e organizzati per fase di scarto:
 
-Installazione dipendenze di sviluppo:
+| Cartella | Documenti | Motivo Scarto |
+|----------|-----------|---------------|
+| `output/italiano_pulito_*.jsonl` | **VALIDI** | Superano tutti i filtri |
+| `output/rejected/1_language/` | Non italiani | `language_score < 0.75` |
+| `output/rejected/2_spam/` | Spam | Modello spam predice positivo + evidenze forti |
+| `output/rejected/3_quality/` | Scarsa qualità | Modello qualità predice negativo (score < 0.65) |
+| `output/inspection/rejected_was_bad.jsonl` | Scarti corretti | Analisi post-run: effettivamente scarti |
+| `output/inspection/rejected_was_good.jsonl` | Falsi scarti | Analisi post-run: erroneamente eliminati |
+
+### Esaminare le Statistiche
 
 ```bash
-pip install -r requirements-dev.txt
+# Vedere quanti documenti per categoria
+# Il comando calcola e mostra il numero totale di righe contenute in tutti i file .jsonl presenti nella cartella output/rejected e nelle sue sottocartelle.
+find output/rejected -name "*.jsonl" -exec wc -l {} + | tail -1
+
+# Leggere il CSV di statistiche
+python3 -c "
+import pandas as pd
+df = pd.read_csv('output/feature/doc_stats_per_file.csv')
+print(df[['language_score', 'text_entropy', 'word_count']].describe())
+"
 ```
 
-Esecuzione locale:
+### Usare il Notebook report.ipynb
 
+Il notebook **`notebooks/report.ipynb`** fornisce un'analisi interattiva:
+
+1. **Caricamento Modello**: Carica automaticamente il modello salvato
+2. **Metriche di Valutazione**: Accuracy, Precision, Recall, F1-Score
+3. **Confusion Matrix**: Visualizza TP, TN, FP, FN
+4. **Feature Importance**: Permutation importance delle top 10 feature
+5. **Correlation Matrix**: Relazioni tra le feature
+6. **Cross-Validation**: Stabilità metriche su fold diversi
+7. **ROC-AUC & Precision-Recall**: Curve di performance
+8. **Model Comparison**: LGBM vs LogisticRegression baseline
+9. **SHAP Values**: Interpretabilità decisioni modello
+10. **Data Leakage Check**: Verifica assenza data leakage
+
+**Per eseguire il notebook:**
 ```bash
-python3 -m pytest -q
-python3 -m pytest tests/test_main.py -v
-python3 -m pytest tests/test_evaluate_model.py -v
-```
+jupyter notebook notebooks/report.ipynb
 
-Esecuzione via Docker:
-
-```bash
-docker compose --profile test run --rm test
+# Oppure se non hai jupyter installato
+pip install jupyter
+jupyter notebook notebooks/report.ipynb
 ```
 
 ## Valutazione del modello
 
-Per la valutazione del classificatore qualità usa:
+Per la valutazione del classificatore qualità consulta:
 
-- [VALUTAZIONE_MODELLO.md](./VALUTAZIONE_MODELLO.md)
-- `scripts/evaluate_model.py`
+- **[VALUTAZIONE_MODELLO.md](./VALUTAZIONE_MODELLO.md)** - Guida completa metriche e interpretazione
+- **`scripts/evaluate_model.py`** - Script valutazione CLI
 
-Esempio rapido:
+### Valutazione Rapida
 
 ```bash
 python3 scripts/evaluate_model.py \
@@ -261,7 +365,33 @@ python3 scripts/evaluate_model.py \
   --compare-models
 ```
 
-Lo script prova a recuperare automaticamente il test set dai metadati del modello; se non li trova, va passato `--test-csv`.
+Genera:
+- Report JSON in `evaluation/evaluation_report.json`
+- Report HTML interattivo in `evaluation/evaluation_report.html`
+- CSV feature importance in `evaluation/feature_importance.csv`
+
+Lo script tenta di recuperare automaticamente il test set dai metadati del modello. Se fallisce, passare `--test-csv`:
+
+```bash
+python3 scripts/evaluate_model.py \
+  --model models/lgbm_quality_model.joblib \
+  --test-csv data/splits/doc_stats_test.csv \
+  --output-dir evaluation
+```
+
+### Valutazione Modello Spam
+
+Per la valutazione del classificatore spam:
+
+```bash
+python3 scripts/spam/evaluate_spam_model.py \
+  --model models/spam_lgbm.joblib \
+  --test-csv evaluation/spam/spam_test_features.csv \
+  --output-dir evaluation/spam \
+  --compare-models
+```
+
+Consulta il modulo **`src/blocks/spam_classifier/spam_evaluation.py`** per dettagli.
 
 ## Filtro spam
 
@@ -296,6 +426,44 @@ In quel caso passa alla fase di quality classification e nei metadata viene aggi
 ```text
 spam_uncertain_reason = "high_score_but_weak_spam_evidence"
 ```
+
+## Training del modello di qualità
+
+Lo script di training qualità è:
+
+```text
+scripts/training_lgbmclassifier.py
+```
+
+Esempio con CSV di feature:
+
+```bash
+python3 scripts/training_lgbmclassifier.py \
+  --csv-path output/feature/doc_stats_per_file.csv \
+  --model-path models/lgbm_quality_model_new.joblib \
+  --label-column label \
+  --threshold 0.65 \
+  --test-size 0.20 \
+  --random-state 42 \
+  --n-estimators 300 \
+  --learning-rate 0.05
+```
+
+**Output prodotti:**
+```text
+models/lgbm_quality_model_new.joblib    # Modello addestrato
+evaluation/                              # Report metriche (opzionale con --output-dir)
+```
+
+**Parametri disponibili:**
+- `--csv-path`: CSV con feature e label
+- `--model-path`: Percorso salvataggio modello
+- `--label-column`: Colonna con etichette ("good"/"bad")
+- `--threshold`: Soglia decisione (default 0.65)
+- `--test-size`: Quota test split (default 0.20)
+- `--n-estimators`: Numero alberi (default 300)
+- `--learning-rate`: Learning rate (default 0.05)
+- `--random-state`: Seed (default 42)
 
 ## Training del modello spam
 
@@ -434,3 +602,97 @@ Alcuni file sono prodotti solo se la relativa opzione è attiva:
 - `spam_model_comparison_cv.csv` e `spam_model_comparison_report.json` richiedono `--compare-models`
 - i file di feature importance non vengono prodotti se si usa `--no-feature-importance`
 
+---
+
+## Troubleshooting & FAQ
+
+### Errore: `ModuleNotFoundError: No module named 'src'`
+
+**Soluzione**: Assicurati di eseguire da root directory del progetto:
+```bash
+cd /home/stefano/ita-llm-pipeline
+python3 src/main.py --config configs/default.conf
+```
+
+### Errore: `File not found: data/train/*.jsonl`
+
+**Soluzione**: Verifica che i file JSONL esistano in `data/train/`:
+```bash
+ls -la data/train/ | head -10
+
+# Oppure usa dataset esterno decommentando docker-compose.yml
+```
+
+### Errore: `GPU out of memory`
+
+**Soluzione**: Riduci il numero di worker:
+```bash
+python3 src/main.py --workers 2 --config configs/default.conf
+```
+
+### Errore nel notebook Jupyter: `ImportError: No module named 'shap'`
+
+**Soluzione**: Installa dipendenze aggiuntive:
+```bash
+pip install shap jupyter matplotlib seaborn scikit-learn
+```
+
+### Output non generato
+
+**Verifiche**:
+1. Controlla che la pipeline sia completata (ultimo log non contiene errori):
+   ```bash
+   tail logs/*/pipeline.log
+   ```
+
+2. Verifica i file temporanei:
+   ```bash
+   ls output/feature/ | grep rank
+   ```
+
+3. Se i file `rank_*` ancora esistono, l'aggregazione è fallita:
+   ```bash
+   python3 src/utils/csv_aggregator.py --feature-dir output/feature
+   ```
+
+### Modello predice sempre la stessa classe
+
+**Cause possibili**:
+- Dataset sbilanciato
+- Threshold troppo alto/basso
+- Features mancanti o costanti
+
+**Verifica**:
+```bash
+python3 -c "
+import pandas as pd
+df = pd.read_csv('output/feature/doc_stats_per_file.csv')
+print(df.describe())  # Controlla range feature
+print(df.isnull().sum())  # Controlla valori mancanti
+"
+```
+
+---
+
+## Documentazione Correlata
+
+- **[VALUTAZIONE_MODELLO.md](./VALUTAZIONE_MODELLO.md)** - Metriche di valutazione dettagliate
+- **[notebooks/report.ipynb](./notebooks/report.ipynb)** - Analisi interattiva modelli
+- **Codice sorgente**:
+  - `src/blocks/classifiers.py` - Logica classificatori LightGBM
+  - `src/blocks/spam_classifier/` - Modulo spam detection
+  - `src/pipeline_factory.py` - Costruzione pipeline
+
+---
+
+## Note Importanti
+
+1. **Path Configurazione**: Il file `default.conf` usa path Docker. Per esecuzione locale, usa argomenti CLI per override.
+
+2. **Modelli Pre-addestrati**: I file `.joblib` in `models/` contengono scaler e metadata. Non eliminare.
+
+3. **Dataset Split**: I CSV in `data/splits/` contengono le split per training/validation/test. Rigenerarli comporta risultati diversi.
+
+4. **Soglie Tuning**: Le soglie di spam (0.75) e qualità (0.65) possono essere tuned con `--threshold-sweep` nei script di evaluation.
+
+5. **Parallelizzazione**: `MAX_WORKERS` di default è `cpu_count() - 2`. Aumentare per HW potente, ridurre per sistemi con memoria limitata.
