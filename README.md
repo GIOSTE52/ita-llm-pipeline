@@ -5,7 +5,8 @@ Pipeline di pulizia e classificazione per corpora italiani basata su DataTrove. 
 ## Funzionalità
 
 - Filtro lingua italiano con soglia configurabile.
-- Estrazione estesa di feature documentali in `DocStatsCsv`.
+- Estrazione estesa di feature documentali in `DocStatsCsv` e `SpamFeatureExtractor`.
+- Classificazione spam tramite modello `spam_lgbm.joblib`.
 - Classificazione qualità tramite modello `lgbm_quality_model.joblib`.
 - Aggregazione finale dei CSV parziali `rank_*_doc_stats_per_file.csv`.
 - Analisi post-run degli scarti con `utils/output_organizer.py`.
