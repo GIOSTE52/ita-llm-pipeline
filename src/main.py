@@ -50,23 +50,7 @@ def main():
             remove_parts=True,
         )
 
-    # --- FINE AGGREGAZIONE ---
-
-    # 6. Recupero delle statistiche di interesse (PipelineStats)
-    # stats = PipelineStats(executor.pipeline)
-    # print("\n" + "=" * 60)
-    # print("REPORT ESECUZIONE PIPELINE")
-    # print("=" * 60)
-
-    # for i, step_stats in enumerate(stats.stats):
-    #     print(f"\n--- Step {i+1}: {step_stats.name} ---")
-    #     print(f"   Tempo globale: {step_stats.time_stats.global_mean:.2f}s")
-    #     if step_stats.stats:
-    #         print(f"  Metriche:")
-    #         for metric_name, metric_stats in step_stats.stats.items():
-    #             print(f"     - {metric_name}: {metric_stats.total}")
-
-    # 7. Analisi finale degli scarti
+    # 6. Analisi finale degli scarti
     print("\n--- Analisi Risultati ---")
     output_classification(cfg["REJECTED_DIR"], cfg["OUTPUT_DIR"])
     print(f"\nOperazione completata. Inspection in: {os.path.join(cfg['OUTPUT_DIR'], 'inspection')}")
