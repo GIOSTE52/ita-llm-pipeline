@@ -135,7 +135,9 @@ class QualityClassifier(PipelineStep):
         threshold: float = 0.5,
     ):
         super().__init__()
+        # Percorso al modello salvato
         self.model_path = model_path
+        # Soglia di confidenza, ovvero
         self.threshold = threshold
 
         # Carica modello e scaler dal file .joblib
@@ -147,6 +149,7 @@ class QualityClassifier(PipelineStep):
             "model_name",
             self.model.__class__.__name__,
         )
+        # Recupero i metadata dei documenti utilizzati e salvati durante il training per mantenere la coerenza
         self.training_metadata: Dict[str, Any] = artifact.get(
             "training_metadata",
             {},

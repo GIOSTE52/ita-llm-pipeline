@@ -16,7 +16,7 @@ def get_language_filter(rejected_dir: str, threshold: float = 0.65, languages = 
     
     Parametri:
     - rejected_dir: Cartella dove salvare i testi non in italiano.
-    - threshold: Soglia di confidenza del modello fasttext (0.65 consigliata).
+    - threshold: Soglia di confidenza del modello fasttext (0.65 consigliata e impostata di default).
     """
     return LanguageFilter(
         languages=languages,
@@ -28,6 +28,7 @@ def get_language_filter(rejected_dir: str, threshold: float = 0.65, languages = 
         )
     )
 
+#Implementato ma non più usato
 class CustomItalianFilter(BaseFilter):
     """
     Filtro euristico per la pulizia del rumore testuale (Menu, Footer, Link).
@@ -77,7 +78,8 @@ class ItalianClassification(BaseFilter):
             threshold: float = 0.65,
             batch_size: int = 1,
     ):
-        if exclusion_writer is None and (rejected_dir or output_folder):
+        # Creo la directory dove verranno scritti e quindi salvati i file rigettati in fase di filtraggio attraverso ItalianClassification
+        if exclusion_writer is None and (rejected_dir and output_folder):
             exclusion_writer = JsonlWriter(
                 output_folder= os.path.join(rejected_dir, "3_quality"),
                 output_filename= output_filename,
@@ -86,12 +88,14 @@ class ItalianClassification(BaseFilter):
 
         super().__init__(exclusion_writer=exclusion_writer, batch_size=batch_size)
         self.name = "Italian Classification"
+        # Istanzio il classificatore 
         self.classifier = QualityClassifier(
             model_path= model_path,
             feature_names= feature_names,
             threshold= threshold
         )
 
+    # Sovrascrivo la funzione filter ereditata dalla classe padre
     def filter(self, doc: Document) -> bool | Tuple[bool, str]:
         features = self.classifier._extract_features(doc)
         if features is None:
@@ -107,9 +111,12 @@ class ItalianClassification(BaseFilter):
             return True
         return False, "quality_bad"
 
+    # Sovrascrivo la funzione filter_batch ereditata dalla classe padre
     def filter_batch(self, batch: List[Document]) -> List[bool | Tuple[bool, str]]:
         return [self.filter(doc) for doc in batch]
     
+    # Definisco la funzione _predict che calcola il punteggio di qualità del documento associato alle features passate come argomento 
+    # e assegna l'etichetta "good" se il punteggio supera la soglia definita nell'istanza del classificatore
     def _predict(self, features: List[float]) -> Tuple[float, str]:
         x = pd.DataFrame([features], columns=self.classifier.feature_names) 
         x_scaled = self.classifier.scaler.transform(x)
