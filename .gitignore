@@ -1,6 +1,8 @@
 # GitHub: file .gitignore per progetto
 # Ignora file temporanei, virtualenv, dati, pesi modelli, credenziali, IDE settings, cache
 
+.agents
+
 # Test files
 tests/
 pytest.ini
@@ -42,7 +44,8 @@ htmlcov/
 *.ipynb_checkpoints
 
 # Data / artifacts / models 
-# data/
+data/
+my_web_dump_output/
 # datasets/
 # data_raw/
 # data_processed/

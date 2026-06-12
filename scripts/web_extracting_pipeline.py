@@ -46,7 +46,7 @@ if __name__ == "__main__":
         # (opzionale) salva gli scarti
         URLFilter(exclusion_writer=JsonlWriter(f"{OUT_BASE}/removed/url")),
 
-        # HTML -> testo
+        # HTML -> testo (estrattore del testo da codice HTML)
         Trafilatura(favour_precision=True),
 
         # filtri qualità stile fineweb.py
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
         # datatrove permette di collegarla agli altri step della pipeline in modo automatico inserendone in input l'iteratore del blocco precedente
         # e così via
-        take_n,     # limita a ~1000 i testi estratti
+        take_n,     # limita a circa 1000 i testi estratti
 
         JsonlWriter(
             OUT_JSONL,
@@ -82,72 +82,3 @@ if __name__ == "__main__":
     )
 
     executor.run()
-
-#################################################
-# Versione 2 (URL from HTTP request)
-#################################################
-
-# import hashlib
-# import time
-# from typing import Iterable, List, Dict, Any
-
-# import requests
-
-# from datatrove.data import Document
-# from datatrove.executor.local import LocalPipelineExecutor
-# from datatrove.pipeline.extractors import Trafilatura
-# from datatrove.pipeline.filters import LanguageFilter
-# from datatrove.pipeline.writers.jsonl import JsonlWriter
-
-# URLS: List[str] = [
-#     # metti qui una lista di URL (o caricala da file)
-# ]
-
-# TARGET_N = 1000
-
-# def http_fetch_reader(urls: List[str], timeout_s: int = 20, sleep_s: float = 0.0):
-#     """
-#     Genera Document con HTML in doc.text e url in doc.metadata.
-#     id deterministico da url (sha1).
-#     """
-#     session = requests.Session()
-#     headers = {"User-Agent": "my-datatrove-pipeline/0.1"}
-
-#     n = 0
-#     for url in urls:
-#         if n >= TARGET_N:
-#             break
-#         try:
-#             r = session.get(url, timeout=timeout_s, headers=headers)
-#             r.raise_for_status()
-#             html = r.text
-
-#             doc_id = hashlib.sha1(url.encode("utf-8")).hexdigest()
-#             yield Document(
-#                 id=doc_id,
-#                 text=html,  # sarà convertito a testo da Trafilatura
-#                 metadata={
-#                     "url": url,
-#                     "status_code": r.status_code,
-#                     "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-#                     "content_type": r.headers.get("content-type"),
-#                 },
-#             )
-#             n += 1
-#         except Exception as e:
-#             # in un prototipo: skip; in produzione: loggare / salvare gli errori
-#             continue
-#         finally:
-#             if sleep_s:
-#                 time.sleep(sleep_s)
-
-# OUT_BASE = "data/http_sample"
-# pipeline = [
-#     http_fetch_reader(URLS),
-#     Trafilatura(favour_precision=True),  # HTML -> testo
-#     LanguageFilter(),                     # opzionale
-#     JsonlWriter(OUT_BASE, output_filename="sample_${rank}.jsonl", compression=None),
-# ]
-
-# executor = LocalPipelineExecutor(pipeline=pipeline, tasks=1, logging_dir=f"{OUT_BASE}/logs")
-# executor.run()

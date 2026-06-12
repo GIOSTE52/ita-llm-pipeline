@@ -163,6 +163,7 @@ class QualityClassifier(PipelineStep):
     # -----------------------------------------------------------------
     def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
         """Classifica ogni documento e produce il risultato nei metadata."""
+        # I documenti vengono processati uno alla volta (alta efficienza in memoria)
         for doc in data:
             features = self._extract_features(doc)
             if features is None:
@@ -176,10 +177,15 @@ class QualityClassifier(PipelineStep):
                 continue
 
             # X = np.array(features).reshape(1, -1)
+
+            # Creo un DataFrame con i nomi delle features scelte in fase di progettazione come colonne e 
+            # riempo le righe con i valori associati al doc processato 
             X = pd.DataFrame([features], columns = self.feature_names) # riga da rimuovere se si vuole usare np.array
+            # Applico lo stesso scaler usato in fase di training per mantenere la coerenza
             X_scaled = self.scaler.transform(X)
             X_scaled = pd.DataFrame(X_scaled, columns = self.feature_names) # riga d arimuovere se si vuole usare np.array
 
+            # Calcolo predizione con il modello e seleziono l'etichetta in base alla soglia scelta 
             proba = self.model.predict_proba(X_scaled)[0]  # [P(bad), P(good)]
             score_good = float(proba[1])
             label = "good" if score_good >= self.threshold else "bad"
@@ -189,27 +195,27 @@ class QualityClassifier(PipelineStep):
 
             yield doc
 
+
     def _extract_features(self, doc) -> Optional[List[float]]:
-        """Estrae il vettore di feature dal metadata del documento."""
+        """Estrae il vettore di feature dai metadata del documento, dove sono state salvate le feature calcolate in DocStatsCsv."""
         try:
             return [float(doc.metadata[f]) for f in self.feature_names]
         except (KeyError, TypeError) as e:
             logger.debug("Impossibile estrarre le feature: %s", e)
             return None
 
-    # =================================================================
-    # METODI STATICI PER IL TRAINING
-    # =================================================================
+    # METODI STATICI UTILI DURANTE IL TRAINING
     @staticmethod
     def _load_labeled_dataset(
         csv_path: str,
         feature_names: Optional[List[str]] = None,
         label_column: str = "label",
     ) -> tuple[pd.DataFrame, pd.Series, List[str]]:
-        """Carica un CSV etichettato e valida feature e label."""
+        """Carica un CSV etichettato e valida feature e label,,poi ocnverte le ulime in formato numerico"""
         feat_names = feature_names or DEFAULT_FEATURE_NAMES
         df = pd.read_csv(csv_path)
 
+        # Controllo se le feature scelte corrispondono alle colonne del csv ovvero alle feature calcolate
         missing_cols = set(feat_names) - set(df.columns)
         if missing_cols:
             raise ValueError(f"Colonne mancanti nel CSV: {missing_cols}")
@@ -221,6 +227,8 @@ class QualityClassifier(PipelineStep):
         X = df[feat_names].copy()
         y = df[label_column].map(LABEL_MAP)
 
+        # Controllo che non ci siano campi NaN in y (ovvero che l'operazione di mapping
+        # precedente sia andata a buon fine)
         if y.isna().any():
             invalid = df[label_column][y.isna()].unique().tolist()
             raise ValueError(
@@ -235,7 +243,7 @@ class QualityClassifier(PipelineStep):
         y_pred: np.ndarray,
         y_pred_proba: np.ndarray,
     ) -> Dict[str, float]:
-        """Calcola un set coerente di metriche binarie."""
+        """Calcola un set coerente di metriche"""
         return {
             "accuracy": float(accuracy_score(y_true, y_pred)),
             "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
@@ -263,9 +271,10 @@ class QualityClassifier(PipelineStep):
             summary[f"{metric_name}_std"] = float(values.std(ddof=0))
         return summary
 
+    # Genera la lista di modelli con cui confrontare le prestazioni del modello scelto (cross-validation)
     @staticmethod
     def _build_candidate_models(random_state: int = 42) -> Dict[str, Dict[str, Any]]:
-        """Restituisce i modelli candidati per il benchmark."""
+        """Restituisce i modelli scelti per il benchmarking"""
         return {
             "lightgbm": {
                 "display_name": "LightGBM",
@@ -314,6 +323,7 @@ class QualityClassifier(PipelineStep):
             },
         }
 
+    # Metodo che permette di effettuare la cross-validation con i modelli istanziati in _build_candidate_models()
     @staticmethod
     def cross_validate_models(
         csv_path: str,
@@ -340,6 +350,8 @@ class QualityClassifier(PipelineStep):
         )
 
         if model_names:
+            # L'utilizzo di sorted, nel controllo della lista di modelli selezionati dall'utente con quelli disponibili,
+            # permette di visualizzare un messaggio di output (errore) sempre nello stesso ordine 
             invalid_model_names = sorted(set(model_names) - set(candidate_models))
             if invalid_model_names:
                 raise ValueError(
