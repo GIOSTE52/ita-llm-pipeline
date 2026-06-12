@@ -18,11 +18,6 @@ def build_italian_cleaning_pipeline(data_dir, output_dir, rejected_dir, pattern,
         # 2. Filtro Lingua (Ora richiamato dal tuo modulo filters)
         get_language_filter(rejected_dir, threshold=0.75, languages = "it"),
 
-        # 3. Filtro Custom per Rumore Web
-        # CustomItalianFilter(
-        #     output_folder=os.path.join(rejected_dir, "2_custom_filter"),
-        #     filename="custom_rejected_${rank}.jsonl"
-        # ),
 
         # # 4. SPAM: Estrattore Feature (Necessario al Classifier per "leggere" il testo)
         # # NON scrive CSV, mette solo i dati nei metadata temporanei

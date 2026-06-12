@@ -10,15 +10,20 @@ from loguru import logger
 from datatrove.utils.lid import FT176LID
 
 # --- REGEX PRE-COMPILATE ---
-RE_URL = re.compile(r"https?://[^\s]+")
+# L'uso di re.compile fuori dal loop di processamento ottimizza le performance,
+# evitando la ricompilazione dell'espressione regolare per ogni documento
+
 RE_EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
 RE_HTML = re.compile(r"<[^>]+>")
 RE_BULLET = re.compile(r"^\s*[-*•]\s", re.MULTILINE)
-RE_REPEATED_CHARS = re.compile(r"(.)\1{2,}")
-RE_REPEATED_SEQ = re.compile(r"(\b\w+\b\s+)\1+", re.IGNORECASE)
+RE_REPEATED_CHARS = re.compile(r"(.)\1{2,}") # Rileva caratteri ripetuti (es. "belllezzza")
+RE_REPEATED_SEQ = re.compile(r"(\b\w+\b\s+)\1+", re.IGNORECASE) # Rileva parole duplicate consecutive
 RE_SPACES = re.compile(r" {2,}")
 RE_PUNC_SEQ = re.compile(r"[.!?,;:]{2,}")
 RE_ELIPSIS = re.compile(r"\.\.\.|…")
+
+# Lista di stopword italiane per il calcolo della stopword_ratio.
+# Fondamentale per distinguere testi naturali da liste di parole o contenuti spazzatura.
 
 ITALIAN_STOPWORDS = {
     "il", "lo", "la", "i", "gli", "le", "un", "uno", "una","l'", "un'",
@@ -50,6 +55,13 @@ ITALIAN_STOPWORDS = {
 }
 
 class DocStatsCsv(DocStats):
+
+    """
+    Componente della pipeline DataTrove per l'estrazione di feature statistiche avanzate.
+    Queste feature sono progettate specificamente per il dataset italiano e serviranno
+    come input per l'addestramento di un modello classificatore LightGBM (Setaccio).
+    """
+
     name = "Italian Advanced Features CSV"
 
     def __init__(
@@ -57,7 +69,7 @@ class DocStatsCsv(DocStats):
         output_folder: DataFolderLike,
         csv_filename: str = "doc_stats_per_file.csv",
         languages: str = "it",
-        **kwargs  # <--- IMPORTANTE: accetta i parametri extra come groups_to_compute
+        **kwargs  #--->accetta i parametri extra come groups_to_compute
     ) -> None:
         # Passiamo i kwargs (incluso groups_to_compute) alla classe base DocStats
         super().__init__(output_folder, **kwargs)
@@ -66,19 +78,26 @@ class DocStatsCsv(DocStats):
         self.all_docs_stats = []
         self._lid_model = None
 
+    #variabilizzo
     @property
     def lid_model(self):
+        """Inizializza il modello FastText LID solo se necessario (risparmio memoria)."""
         if self._lid_model is None:
             self._lid_model = FT176LID([self.languages])
         return self._lid_model
 
     def _calculate_entropy(self, text: str) -> float:
+        """Calcola l'entropia di Shannon a livello di caratteri per misurare la compressione del testo."""
         if not text: return 0.0
         counts = Counter(text)
         text_len = len(text)
         return -sum((count / text_len) * math.log2(count / text_len) for count in counts.values())
 
     def extract_stats(self, doc: Document) -> dict:
+        """
+        Motore di estrazione: trasforma il testo grezzo in un vettore di 52 feature numeriche.
+        Le feature sono divise in: Base, Linguistiche, Strutturali e di Anomalia.
+        """
         text = doc.text
         if not text or len(text) == 0:
             return self._get_empty_stats()
@@ -90,7 +109,7 @@ class DocStatsCsv(DocStats):
         line_count = len(lines)
         paragraphs = [p for p in text.split("\n\n") if p.strip()]
         
-        # 1. BASE (7)
+        # 1. BASE: Metriche di composizione dei caratteri
         base = {
             "length": char_count,
             "white_space_ratio": sum(1 for c in text if c.isspace()) / char_count,
@@ -101,7 +120,8 @@ class DocStatsCsv(DocStats):
             "punctuation_ratio": sum(1 for c in text if c in '.,;:!?()[]""\'\'') / char_count,
         }
 
-        # 2. LINGUISTICHE (17)
+        # 2. LINGUISTICHE: Analisi sintattica superficiale e stopword
+        # L'uso delle vocali accentate è specifico per la lingua italiana.
         periods, questions, exclamations = text.count('.'), text.count('?'), text.count('!')
         sentence_count = max(1, periods + questions + exclamations)
         linguistic = {
@@ -124,7 +144,7 @@ class DocStatsCsv(DocStats):
             "stopword_ratio": sum(1 for w in words if w.lower() in ITALIAN_STOPWORDS) / word_count if word_count > 0 else 0,
         }
 
-        # 3. STRUTTURALI (14)
+        # 3. STRUTTURALI: Layout del documento e presenza di rumore (HTML, Email, URL)
         structural = {
             "line_count": line_count,
             "paragraph_count": len(paragraphs),
@@ -142,7 +162,7 @@ class DocStatsCsv(DocStats):
             "special_char_ratio": sum(1 for c in text if c in "@#$%^&*+=") / char_count,
         }
 
-        # 4. ANOMALIA (14)
+        # 4. ANOMALIA: Identificazione di potenziali testi generati, boilerplate o spam
         word_counts = Counter(w.lower() for w in words)
         unique_words = len(word_counts)
         anomaly = {
@@ -165,7 +185,12 @@ class DocStatsCsv(DocStats):
         return {**base, **linguistic, **structural, **anomaly}
     
     def run(self, data, rank=0, world_size=1):
-        # 1. Creiamo un file unico per ogni worker (fondamentale per evitare blocchi)
+        """
+        Esecuzione della pipeline in parallelo. 
+        Implementa una scrittura streaming su CSV per mantenere l'occupazione di memoria costante (O(1)).
+        """
+
+        # Creazione di un file unico per worker per evitare race conditions in ambienti distributed
         temp_csv_name = f"rank_{rank}_{self.csv_filename}"
         
         # 2. Apriamo il file in modalità scrittura immediata
@@ -178,6 +203,7 @@ class DocStatsCsv(DocStats):
                     # Estraiamo le 41 features
                     doc_features = self.extract_stats(doc)
                     
+                    # Gestione della Language Identification (LID)
                     lang_score = doc.metadata.get("language_score")
                     if lang_score is None:
                         _, lang_score = self.lid_model.predict(doc)
@@ -194,10 +220,10 @@ class DocStatsCsv(DocStats):
                         writer = csv.DictWriter(f, fieldnames=list(row.keys()))
                         writer.writeheader()
                     
-                    # SCRITTURA IMMEDIATA: Questo svuota la RAM ad ogni riga
+                    # Scrittura immediata su disco (flush implicito) per prevenire saturazione RAM
                     writer.writerow(row)
                     
-                    # Aggiorniamo i metadati per i blocchi successivi (classificatore)
+                    # Propagazione delle feature nei metadati per eventuali step successivi della pipeline
                     doc.metadata.update(doc_features)
                     doc.metadata["language_score"] = lang_score
                 
@@ -205,44 +231,9 @@ class DocStatsCsv(DocStats):
         
         logger.info(f"Worker {rank} ha finito di scrivere il suo file parziale.")
 
-    # IMPORTANTE: Svuota questo metodo per evitare che DataTrove provi a salvare di nuovo
     def _save_to_csv(self):
         pass
-
-    # def run(self, data, rank=0, world_size=1):
-    #     self.all_docs_stats = []
-    #     for doc in data:
-    #         with self.track_time():
-    #             doc_features = self.extract_stats(doc)
-    #             lang_score = doc.metadata.get("language_score")
-    #             if lang_score is None:
-    #                 _, lang_score = self.lid_model.predict(doc)
-                
-    #             row = {
-    #                 "doc_id": doc.id,
-    #                 "label": doc.metadata.get("label", "unknown").lower(),
-    #                 "language_score": lang_score,
-    #                 **doc_features
-    #             }
-    #             self.all_docs_stats.append(row)
-    #             doc.metadata.update(doc_features)
-    #             doc.metadata["language_score"] = lang_score
-    #         yield doc
-        
-    #     if rank == 0:
-    #         self._save_to_csv()
-
-    # def _save_to_csv(self):
-    #     if not self.all_docs_stats: return
-    #     fieldnames = list(self.all_docs_stats[0].keys())
-    #     try:
-    #         with self.output_folder.open(self.csv_filename, "wt") as f:
-    #             writer = csv.DictWriter(f, fieldnames=fieldnames)
-    #             writer.writeheader()
-    #             writer.writerows(self.all_docs_stats)
-    #         logger.info(f"CSV salvato correttamente.")
-    #     except Exception as e:
-    #         logger.error(f"Errore salvataggio: {e}")
+           
 
     def _get_empty_stats(self) -> dict:
         # Metodo di fallback per doc vuoti (ritorna 0 per tutte le chiavi)
