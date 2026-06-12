@@ -28,6 +28,8 @@ INV_LABEL_MAP = {0: "ham", 1: "spam"}
 
 LABEL_COLUMNS = ["spam_target_label", "target_label"]
 
+
+# Features escluse dal training
 EXCLUDED_TRAINING_FEATURES = {
     # identificativi / label
     "doc_id",
@@ -39,7 +41,7 @@ EXCLUDED_TRAINING_FEATURES = {
     "spam_gold_label",
     "label",
 
-    # debug / testo grezzo: NON devono mai entrare nel training
+    # debug / testo grezzo
     "text",
     "raw_text",
     "text_preview",
@@ -47,28 +49,26 @@ EXCLUDED_TRAINING_FEATURES = {
     "body",
     "content",
 
-    # metadata di annotazione: utili per analisi, non per training
+    # metadata di annotazione
     "spam_subtype",
     "annotation_source",
-    "annotator", #
-    "annotation_version", #
+    "annotator", 
+    "annotation_version", 
     "url",
     "file_path",
     "date",
-    "dump", #
+    "dump", 
     "language",
     "lang_score",
     "minhash_cluster_size",
     "lang_is_ita",
-    
 
-    # costanti
+    # feat costanti
 
     "noise_without_spam_intent",
     "unsubscribe_keyword_hits",
 
-
-    # feature escluse 
+    # altre feat
     
     "char_count",
     "digit_count",
@@ -101,10 +101,12 @@ DEFAULT_FEATURE_NAMES: List[str] = [
     c for c in FEATURE_COLUMNS if c not in EXCLUDED_TRAINING_FEATURES
 ]
 
+
 class SpamClassifier(PipelineStep):
     """
-    Motore di inferenza spam.
-    NON filtra i documenti: aggiunge solo metadata di predizione.
+    Il componente carica il modello LightGBM serializzato, ricostruisce il vettore delle feature dai metadata del documento, 
+    applica lo scaler usato in training e salva nei metadata la label predetta e la probabilità di spam.
+    Non scarta direttamente i documenti: la decisione di filtro è demandata a SpamFilter.
     """
     name = "Spam Classifier"
 
@@ -123,8 +125,8 @@ class SpamClassifier(PipelineStep):
         self.scaler: StandardScaler = artifact["scaler"]
         self._feature_names_train: List[str] = artifact.get("feature_names", DEFAULT_FEATURE_NAMES)
 
-        #se la trashold non è impostata usa come predefinito 0.7
-        saved_threshold = artifact.get("threshold", 0.7)
+        #se la trashold non è impostata usa come predefinito 0.75
+        saved_threshold = artifact.get("threshold", 0.75)
         self.threshold = float(saved_threshold if threshold is None else threshold)
 
         self.feature_names = feature_names or self._feature_names_train
@@ -136,9 +138,11 @@ class SpamClassifier(PipelineStep):
             self.threshold,
         )
 
-   
-
     def _extract_features(self, doc) -> Optional[List[float]]:
+        """
+        Ricostruisce il vettore numerico delle feature a partire dai metadata. Le feature mancanti vengono valorizzate a zero. 
+        Se una feature non è convertibile in valore numerico, il documento viene trattato in modo conservativo come ham, evitando scarti dovuti a errori di formato.
+        """
         values = []
         metadata = getattr(doc, "metadata", {}) or {}
         try:
@@ -221,6 +225,10 @@ class SpamClassifier(PipelineStep):
 
     @staticmethod
     def _resolve_feature_names(df: pd.DataFrame, feature_names: Optional[List[str]] = None) -> List[str]:
+        """
+        Individua la colonna da usare come label spam/ham.
+        La funzione consente di gestire CSV provenienti da fonti diverse, nei quali la label può avere nomi differenti.
+        """
         requested = feature_names or DEFAULT_FEATURE_NAMES
         available = [c for c in requested if c in df.columns]
         if not available:
@@ -228,28 +236,29 @@ class SpamClassifier(PipelineStep):
         return available
     
 
-    #serve per rimuovere features non utili al training o che renderebbero troppo facile il training
+
     @staticmethod
     def _drop_bad_features(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
-        # --- rimuove feature costanti ---
+        """
+        serve per rimuovere features costanti, non utili al training o che renderebbero troppo facile il training.
+        """
+
         constant_cols = [c for c in X.columns if X[c].nunique(dropna=False) <= 1]
 
-        # --- segnala feature quasi costanti ---
         near_constant_cols = []
         for c in X.columns:
             vc = X[c].value_counts(normalize=True, dropna=False)
             if not vc.empty and vc.iloc[0] >= 0.995:
                 near_constant_cols.append(c)
 
-        # --- nel dataset attuale rimuovo solo le costanti vere,
-        # le quasi costanti le segnalo ma non le butto in automatico ---
+        # le quasi costanti non vengono buttate in automatico ma segnalate
         remove_cols = sorted(set(constant_cols))
         keep = [c for c in X.columns if c not in remove_cols]
 
         return X[keep].copy(), remove_cols, sorted(set(near_constant_cols) - set(remove_cols)) 
 
 
-    #allena il modello sui dati estratti dal csv.
+    
     @staticmethod
     def train_from_csv(
         csv_path: str,
@@ -263,6 +272,12 @@ class SpamClassifier(PipelineStep):
         errors_output_dir: Optional[str] = None, 
 
     ) -> dict:
+        
+        """
+        Addestra il modello spam/ham a partire dal CSV delle feature.
+        La funzione risolve la colonna label, seleziona le feature ammesse, rimuove colonne costanti, 
+        esegue lo split train/test, addestra LightGBM e salva file di analisi sugli errori di classificazione.
+        """
         df = pd.read_csv(csv_path)
 
         if "doc_id" not in df.columns:
@@ -313,7 +328,6 @@ class SpamClassifier(PipelineStep):
         X = df[feat_names].apply(pd.to_numeric, errors="coerce").fillna(0.0)
         y = df[label_column].map(LABEL_MAP)
 
-        # remove constant junk before split
         X, dropped_constants, near_constants = SpamClassifier._drop_bad_features(X)
         feat_names = X.columns.tolist()
 
@@ -329,8 +343,6 @@ class SpamClassifier(PipelineStep):
             stratify=y,
         )
 
-        # modificato 
-        
         os.makedirs(errors_output_dir, exist_ok=True)
 
         train_df = df.loc[X_train.index].copy()
@@ -535,7 +547,6 @@ class SpamClassifier(PipelineStep):
             "false_negatives": false_negatives, 
         }
 
-
     @staticmethod
     def save_model(result: dict, output_path: str):
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -552,13 +563,13 @@ class SpamClassifier(PipelineStep):
         joblib.dump(artifact, output_path)
         print(f"[OK] Modello salvato in: {output_path}")
 
+
 class SpamFilter(BaseFilter):
-    """ 
-    Filtro spam vero e proprio.
-    - I documenti ham continuano nella pipeline
-    - I documenti spam vengono scartati e salvati nella cartella rejected
     """
-    
+    Filtro spam della pipeline DataTrove.
+    Il filtro usa SpamClassifier per stimare la probabilità di spam e decide se mantenere o scartare il documento. 
+    I documenti rifiutati vengono salvati tramite l'exclusion writer nella directory rejected/2_spam.
+    """    
     name = "Spam Filter"
 
     def __init__(
@@ -579,13 +590,16 @@ class SpamFilter(BaseFilter):
         )
 
         super().__init__(exclusion_writer=exclusion_writer)
+
+      
     def _has_strong_spam_evidence(self, metadata: dict, spam_score: float) -> bool:
         """
-        Evita di classificare come spam testi solo confusi, rotti o scritti male.
-        Lo spam deve avere almeno segnali concreti: URL, CTA, phishing, urgenza,
-        denaro, brand/link, TLD sospetti, shortener, ecc.
-        """
-
+        Verifica la presenza di evidenze forti prima di scartare un documento.
+        La probabilità prodotta dal modello non è usata da sola per eliminare il testo. 
+        Lo scarto viene confermato solo in presenza di segnali concreti, come URL sospetti, 
+        shortener, CTA, urgenza, denaro, phishing o combinazioni tra brand e link. 
+        Questa scelta riduce il rischio di falsi positivi.
+        """ 
         url_count = float(metadata.get("url_count_text", 0.0))
         suspicious_tld_count = float(metadata.get("suspicious_tld_count", 0.0))
         shortener_url_count = float(metadata.get("shortener_url_count", 0.0))
@@ -606,7 +620,6 @@ class SpamFilter(BaseFilter):
         ham_business_hits = float(metadata.get("ham_business_hits", 0.0))
         ham_strength_score = float(metadata.get("ham_strength_score", 0.0))
 
-        # Evidenze forti: phishing/spam classico
         if suspicious_tld_count > 0:
             return True
 
@@ -631,18 +644,21 @@ class SpamFilter(BaseFilter):
         if brand_keyword_hits > 0 and url_count > 0 and cta_keyword_hits > 0:
             return True
 
-        # Spam molto evidente anche senza URL
         if spam_keyword_hits >= 4 and (cta_keyword_hits > 0 or urgency_keyword_hits > 0 or money_keyword_hits > 0):
             return True
 
-        # Se il modello è estremamente convinto, accetto lo scarto,
-        # ma solo se non sembra una comunicazione business/ham.
         if spam_score >= 0.90 and ham_business_hits == 0 and ham_strength_score == 0:
             return True
 
         return False
 
+
+    
     def filter(self, doc):
+        """
+        Applica la decisione finale di filtro. Se il modello predice spam e sono presenti evidenze forti, il documento viene scartato. 
+        Se il punteggio è alto ma le evidenze sono deboli, il documento viene mantenuto nella pipeline e marcato come caso incerto nei metadata, lasciando la valutazione finale ai blocchi successivi.
+        """
         if getattr(doc, "metadata", None) is None:
             doc.metadata = {}
     
@@ -659,9 +675,6 @@ class SpamFilter(BaseFilter):
                 doc.metadata["spam_reject_reason"] = "spam_detected"
                 return False, "spam_detected"
     
-            # Caso importante:
-            # il modello sospetta spam, ma mancano prove forti.
-            # Non lo butto nello spam: lo lascio passare al quality classifier.
             doc.metadata["spam_uncertain_reason"] = "high_score_but_weak_spam_evidence"
             return True
     

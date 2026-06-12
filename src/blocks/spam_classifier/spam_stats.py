@@ -17,6 +17,10 @@ from .spam_keywords import (
 )
 
 def _safe_text(value) -> str:
+    """
+    Converte il contenuto del documento in stringa sicura.
+    Serve a evitare errori durante l'estrazione delle feature quando il campo testuale è nullo o non ha il tipo atteso.
+    """
     return value if isinstance(value, str) else ""
 
 def _safe_float(value, default=0.0) -> float:
@@ -44,6 +48,10 @@ def _extract_spam_label(metadata: dict) -> str:
     return ""
 
 def _basic_char_stats(text: str) -> Dict[str, float]:
+    """
+    Calcola statistiche di base sui caratteri del testo.
+    Lunghezza, cifre, maiuscole, punteggiatura e spazi.
+    """
     char_count = len(text)
     if char_count == 0:
         return {
@@ -189,7 +197,13 @@ def compute_custom_lang_score(text: str, metadata: dict | None = None) -> float:
 
     return round(_clip01(final_score), 4)
 
+
+
 def extract_spam_features(doc) -> Dict[str, float | str]:
+    """
+    Calcola le feature spam associate a un singolo documento.
+    L'obiettivo è rappresentare sia l'intento spam sia eventuali segnali di legittimità del documento.
+    """
     text = _safe_text(getattr(doc, "text", ""))
     metadata = getattr(doc, "metadata", {}) or {}
 
@@ -216,7 +230,6 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
     spam_keyword_hits = float(kw.spam_keywords)
     cta_keyword_hits = float(kw.cta_keywords)
 
-    #
     money_keyword_hits = float(kw.money_keywords)
     urgency_keyword_hits = float(kw.urgency_keywords)
 
@@ -235,8 +248,6 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         (ham_business_hits + 1.0) / (cta_keyword_hits + 1.0)
     )
 
-    # da tenere d'occhio
-
     ham_strength_score = float(
         ham_formal_hits +
         ham_admin_doc_hits +
@@ -244,16 +255,12 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         business_signature_hits
     )
 
-
     ham_strength_to_spam_ratio = (
         (ham_strength_score + 1.0) / (spam_keyword_hits + 1.0)
     ) 
 
-
     lang = _safe_text(metadata.get("language")).lower()
     lang_score = compute_custom_lang_score(text,metadata)
-   
-    # rumore ma non per forza spam
 
     noise_score = 0.0
 
@@ -286,13 +293,9 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
 
     noise_without_spam_intent = 1.0 if noise_score >= 2.0 and spam_intent_score == 0.0 else 0.0
 
-
-
-
     url_count = float(pat["url_count"])
     email_count = float(pat["email_count"])
 
-     # --- NUOVE COMBO CHEAP ---
     # booleane leggere che spesso rendono più delle feature singole
     has_link_and_cta = 1.0 if (pat["url_count"] > 0 and pat["action_phrase_count"] > 0) else 0.0
     has_urgency_and_cta = 1.0 if (kw.urgency_keywords > 0 and pat["action_phrase_count"] > 0) else 0.0
@@ -322,13 +325,11 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         business_signature_hits > 0 and cta_keyword_hits == 0
     ) else 0.0
 
-    # score aggregato cheap sulla pressione simbolica
     symbol_pressure_score = float(
         pat["promo_symbol_count"] +
         pat["uppercase_token_count"] +
         pat["digit_run_count"]
     )
-
 
     features = {
         "doc_id": _safe_text(getattr(doc, "id", "")) or _safe_text(metadata.get("id")),
@@ -362,7 +363,6 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "short_line_count": float(pat["short_line_count"]),
         "short_token_count": float(pat["short_token_count"]),
 
-        # ham/business
         "ham_business_hits": ham_business_hits,
         "ham_formal_hits": ham_formal_hits,
         "ham_admin_doc_hits": ham_admin_doc_hits,
@@ -372,12 +372,12 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "digit_run_count": float(pat["digit_run_count"]),
 
         "has_link_and_cta": has_link_and_cta, 
-        "has_urgency_and_cta": has_urgency_and_cta, #nuova
-        "has_brand_and_link": has_brand_and_link, #nuova
-        "has_money_and_cta": has_money_and_cta, #nuova
-        "has_account_and_security": has_account_and_security, #nuova
-        "has_delivery_and_link": has_delivery_and_link, #nuova
-        "symbol_pressure_score": symbol_pressure_score, #nuova
+        "has_urgency_and_cta": has_urgency_and_cta, 
+        "has_brand_and_link": has_brand_and_link, 
+        "has_money_and_cta": has_money_and_cta, 
+        "has_account_and_security": has_account_and_security, 
+        "has_delivery_and_link": has_delivery_and_link, 
+        "symbol_pressure_score": symbol_pressure_score, 
         "has_ham_and_no_url": has_ham_and_no_url,
         "has_formal_and_no_cta": has_formal_and_no_cta,
         "has_admin_doc_and_no_url": has_admin_doc_and_no_url,
@@ -415,16 +415,11 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
         "uppercase_token_count_clip": float(min(pat["uppercase_token_count"], 5)),
         "safe_security_ham_hits": safe_security_ham_hits,
         "safe_security_to_spam_ratio": (safe_security_ham_hits + 1.0) / (spam_keyword_hits + 1.0),
-
-        #
         "spam_keyword_density": spam_keyword_density,
         "cta_keyword_density": cta_keyword_density,
         "money_keyword_density": money_keyword_density,
         "urgency_keyword_density": urgency_keyword_density,
         "ham_business_density": ham_business_density,
-
-        
-
     }
     return features
 
@@ -514,19 +509,19 @@ FEATURE_COLUMNS: List[str] = [
     "safe_security_ham_hits",
     "safe_security_to_spam_ratio",
 
-    #
     "spam_keyword_density",
     "cta_keyword_density",
     "money_keyword_density",
     "urgency_keyword_density",
     "ham_business_density",
-
-
-
 ]
 
 
 class SpamFeatureExtractor(PipelineStep):
+    """
+    Riceve i documenti in streaming, calcola feature lessicali, strutturali e comportamentali 
+    utili al riconoscimento dello spam e le salva nei metadata del documento. 
+    """
     name = "Spam Feature Extractor"
 
     def run(self, data: DocumentsPipeline, rank: int = 0, world_size: int = 1):
@@ -538,7 +533,12 @@ class SpamFeatureExtractor(PipelineStep):
                 doc.metadata[k] = v
             yield doc
 
+
 class SpamFeatureCsvWriter(PipelineStep):
+    """
+    Legge dai metadata le feature prodotte da SpamFeatureExtractor e le scrive progressivamente su file CSV. 
+    L'output viene separato per rank del worker, così da supportare l'esecuzione parallela della pipeline senza conflitti di scrittura.
+    """
     name = "Spam Feature CSV Writer"
 
     def __init__(self, output_folder: str, csv_filename: str = "spam_doc_features.csv"):

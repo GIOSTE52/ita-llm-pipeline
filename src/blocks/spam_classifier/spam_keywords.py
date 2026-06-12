@@ -6,6 +6,9 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Dict, Iterable, Pattern, Sequence, Set
 
+
+# Dizionari utilizzati per il calcolo delle feature
+
 DELIVERY_BRANDS: Set[str] = {
     "sda", "bartolini", "brt", "dpd", "gls",
     "poste delivery", "fedex", "ups", "dhl",
@@ -156,7 +159,6 @@ SAFE_SECURITY_HAM_TERMS: Set[str] = {
     "se non sei stato tu",
     "puoi ignorare",
     "nessuna azione richiesta",
-    # nuovi
     "accedi solo dal sito ufficiale",
     "verifica dal sito ufficiale",
     "non cliccare su link sospetti",
@@ -226,6 +228,9 @@ URL_SHORTENERS: Set[str] = {
     "rebrand.ly", "is.gd", "buff.ly",
 }
 
+
+# Regex utilizzate per il calcolo delle features
+
 WORD_RE: Pattern[str] = re.compile(r"\b[\wÀ-ÖØ-öø-ÿ'-]+\b", re.UNICODE)
 
 URL_RE: Pattern[str] = re.compile(r"""
@@ -277,8 +282,16 @@ BUSINESS_SIGNATURE_RE: Pattern[str] = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+
+
 @dataclass(frozen=True)
 class KeywordBundle:
+    """
+    Contenitore dei conteggi lessicali usati nella feature extraction spam.
+    I campi rappresentano gruppi semantici distinti, come keyword promozionali,
+    urgenza, denaro, Call To Action, sicurezza, consegna, brand e unsubscribe.
+    Questi conteggi vengono poi trasformati in feature numeriche.
+    """
     spam_keywords: int
     urgency_keywords: int
     money_keywords: int
@@ -306,13 +319,25 @@ def normalize_url(url: str) -> str:
     cleaned = re.sub(r"^http:/([^/])", r"http://\1", cleaned, flags=re.IGNORECASE)
     return cleaned
 
+
 def normalize_for_matching(text: str) -> str:
+    """
+    Normalizza il testo per rendere più robusto il matching delle keyword.
+    """
     normalized = normalize_text(text)
     normalized = normalized.replace("'", " ")
     normalized = re.sub(r"[^0-9a-zA-ZÀ-ÖØ-öø-ÿ]+", " ", normalized, flags=re.UNICODE)
     return re.sub(r"\s+", " ", normalized).strip()
 
+
+
 def count_term_matches(normalized_text: str, terms: Iterable[str]) -> int:
+    """
+    Contenitore dei conteggi lessicali usati nella feature extraction spam.
+    I campi rappresentano gruppi semantici distinti, come keyword promozionali,
+    urgenza, denaro, Call To Action, sicurezza, consegna, brand e unsubscribe.
+    Questi conteggi vengono poi trasformati in feature numeriche.
+    """
     total = 0
     padded = f" {normalize_for_matching(normalized_text)} "
     for term in terms:
@@ -320,7 +345,12 @@ def count_term_matches(normalized_text: str, terms: Iterable[str]) -> int:
         total += padded.count(candidate)
     return total
 
+
 def keyword_bundle(text: str) -> KeywordBundle:
+    """
+    Conta le keyword spam e ham/business presenti nel testo.
+    La funzione raggruppa i segnali lessicali in categorie funzionali, successivamente usate dal feature extractor e dal filtro spam.
+    """
     normalized = normalize_for_matching(text)
     return KeywordBundle(
         spam_keywords=count_term_matches(normalized, SPAM_TERMS),
@@ -476,7 +506,11 @@ def count_safe_security_ham_terms(text: str) -> int:
     return count_term_matches(normalized, SAFE_SECURITY_HAM_TERMS)
 
 
+
 def quick_pattern_counts(text: str) -> Dict[str, int]:
+    """
+    Estrae pattern strutturali rilevanti per il rilevamento spam.
+    """
     emails = list(extract_emails(text))
     urls = list(extract_urls(text))
     domains = []
@@ -487,7 +521,6 @@ def quick_pattern_counts(text: str) -> Dict[str, int]:
 
     unique_urls = {u.lower() for u in urls}
     unique_domains = set(domains)
-
 
     return {
         "url_count": len(urls),
@@ -505,7 +538,6 @@ def quick_pattern_counts(text: str) -> Dict[str, int]:
         "urgency_cta_url_combo": count_urgency_cta_url_combo(text),
         "money_cta_combo": count_money_cta_combo(text),     
         
-        # ham/business
         "ham_business_hits": count_ham_business_terms(text),
         "ham_formal_hits": count_ham_formal_terms(text),
         "ham_admin_doc_hits": count_ham_admin_doc_terms(text),

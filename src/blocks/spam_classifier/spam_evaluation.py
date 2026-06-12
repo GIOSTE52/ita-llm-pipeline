@@ -1,16 +1,11 @@
-# src/blocks/spam_classifier/spam_evaluation.py
-
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from datetime import datetime, timezone
 
-import joblib
 from sklearn.metrics import f1_score
 import pandas as pd
-
-#nuovi
 import numpy as np
 import lightgbm as lgb
 
@@ -39,16 +34,14 @@ from sklearn.inspection import permutation_importance
 
 from .spam_classifier import SpamClassifier, LABEL_MAP, INV_LABEL_MAP
 
-#nuovo
 
 def _threshold_metric_scorer(metric_func, threshold: float):
     """
     Crea uno scorer custom per usare la stessa soglia spam anche in cross validation.
-
     Serve perché di default sklearn usa predict(), quindi soglia 0.5.
-    Noi invece vogliamo valutare i modelli con la soglia scelta, per esempio 0.60.
+    Noi invece vogliamo valutare i modelli con la soglia scelta ossia 0.75.
     """
-
+    
     def scorer(estimator, X, y_true):
         spam_proba = estimator.predict_proba(X)[:, 1]
         y_pred = (spam_proba >= threshold).astype(int)
@@ -61,12 +54,8 @@ def _build_spam_candidate_models(random_state: int) -> dict:
     Modelli candidati per il confronto CV.
 
     Nota importante:
-    - LightGBM, RandomForest, ExtraTrees e Dummy ricevono direttamente il DataFrame,
-      così mantengono i nomi delle feature.
+    - LightGBM, RandomForest, ExtraTrees e Dummy ricevono direttamente il DataFrame così da mantenere i nomi delle feature.
     - Solo LogisticRegression usa StandardScaler, perché ne ha realmente bisogno.
-
-    Questo evita il warning:
-    "X does not have valid feature names, but LGBMClassifier was fitted with feature names".
     """
 
     return {
@@ -136,8 +125,7 @@ def compare_spam_models_cv(
     model_names: list[str] | None = None,
 ) -> dict:
     """
-    Confronta più modelli spam in Stratified K-Fold Cross Validation.
-
+    Confronta più classificatori sulle stesse feature spam.
     Output:
     - spam_model_comparison_cv.csv
     - spam_model_comparison_report.json
@@ -322,14 +310,14 @@ def compare_spam_models_cv(
 
     return result
 
+
 def build_threshold_sweep(
     y_true,
     spam_proba,
     thresholds: list[float],
 ) -> pd.DataFrame:
     """
-    Valuta lo stesso modello su più soglie senza riaddestrare.
-    Include statistiche sia spam sia ham.
+    Valuta il comportamento del classificatore spam al variare della soglia senza riaddestrare
     """
 
     rows = []
@@ -440,12 +428,6 @@ def build_threshold_sweep(
 
     return pd.DataFrame(rows)
 
-
-
-
-#
-
-
 def evaluate_spam_model(
     model_path: str,
     test_csv: str,
@@ -463,12 +445,11 @@ def evaluate_spam_model(
 ) -> dict:
 
 
+    
     """
-    Valuta il modello spam su un CSV già contenente le feature spam.
-
-    Label attese:
-        ham  -> 0
-        spam -> 1
+    Valuta il modello spam su un CSV di feature già estratte.
+    La funzione carica il modello, applica la soglia di classificazione, calcola le metriche principali, salva predizioni, falsi positivi,
+    falsi negativi, feature importance e, opzionalmente, il confronto tra modelli e lo sweep delle soglie.
 
     Output principali:
         - spam_evaluation_report.json
@@ -683,13 +664,10 @@ def evaluate_spam_model(
 
     feature_importance_rows = []
 
+
     def spam_f1_scorer(estimator, X_perm, y_true):
         """
         Scorer custom per permutation_importance.
-
-        permutation_importance può passare array NumPy senza nomi colonna.
-        Qui riconvertiamo sempre X in DataFrame con le feature corrette prima
-        di chiamare LightGBM.
         """
 
         if isinstance(X_perm, pd.DataFrame):
