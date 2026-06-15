@@ -35,7 +35,7 @@ validation_threshold = 0.65
 # Se non esiste, creo la cartella che ospiterà i 3 datasets
 os.makedirs(output_dir, exist_ok=True)
 
-# === STEP 1: Leggi il dataset completo ===
+# === STEP 1: Leggere il dataset completo ===
 print("Caricamento dataset...")
 print(f"   Percorso: {csv_path}")
 df = pd.read_csv(csv_path)
@@ -74,7 +74,7 @@ print(f"Training: {train_csv}")
 print(f"Validation: {val_csv}")
 print(f"Test: {test_csv}")
 
-# === STEP 4: Allena il modello sul training set ===
+# === STEP 4: Allenare il modello sul training set ===
 print("\nAddestramento del modello...")
 result = QualityClassifier.train_from_csv(
     csv_path=train_csv,
@@ -99,11 +99,16 @@ result["training_metadata"] = {
     "validation_threshold": validation_threshold,
 }
 
-# === STEP 5: Salva il modello ===
+# === STEP 5: Salvo il modello ===
 print("\nSalvataggio del modello...")
-model_path = os.path.join(project_root, "models", "lgbm_quality_model.joblib")
-os.makedirs(os.path.dirname(model_path), exist_ok=True)
-QualityClassifier.save_model(result, model_path)
+saving_path = os.path.join(project_root, "models", "lgbm_quality_model.joblib")
+# saving_path = os.path.join(project_root, "models", "modello_di_prova.joblib")
+os.makedirs(os.path.dirname(saving_path), exist_ok=True)
+# QualityClassifier.save_model(result, saving_path)
+try:
+    QualityClassifier.save_model(result, "models/my_model.joblib")
+except (ValueError, KeyError, RuntimeError) as e:
+    print(f"Salvataggio fallito: {e}")
 
 print("\nSplit registrati nel modello e salvati in data/splits:")
 print(f"   Train: {train_csv}")
