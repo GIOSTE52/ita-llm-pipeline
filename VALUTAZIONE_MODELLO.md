@@ -96,7 +96,51 @@ I file hanno questi ruoli:
 | --- | --- |
 | `evaluation_report.json` | Metriche, confusion matrix, metadati modello, top feature e confronto modelli se richiesto. |
 | `feature_importance.csv` | Permutation importance delle feature. |
-| `evaluation_report.html` | Report interattivo con metriche, confusion matrix, feature importance, ROC curve e Precision-Recall curve. |
+| `evaluation_report.html` | Report interattivo con metriche, confusion matrix, feature importance, ROC curve e Precision-Recall curve. Generato da template Jinja2. |
+
+## Visualizzazione del report HTML
+
+Il report HTML viene generato a partire dal template `src/blocks/templates/evaluation_report.html`, che viene riempito con i dati di valutazione usando **Jinja2**.
+
+### Aprire il report nel browser
+
+Una volta generato, è possibile aprire il report direttamente nel browser:
+
+**Linux/macOS:**
+```bash
+# Linux
+xdg-open evaluation/evaluation_report.html
+
+# macOS
+open evaluation/evaluation_report.html
+```
+
+**Windows:**
+```bash
+start evaluation/evaluation_report.html
+```
+
+### Servire il report localmente (opzionale)
+
+Per una migliore esperienza, è possibile servire il report tramite un server HTTP:
+
+```bash
+cd evaluation
+python -m http.server 8000
+# Poi visita http://localhost:8000/evaluation_report.html
+```
+
+### Contenuto del report HTML
+
+Il report include:
+
+- **Metadati**: Dataset, modello, soglia decisionale
+- **Metriche principali**: Accuracy, Balanced Accuracy, F1-Score, ROC-AUC
+- **Confusion Matrix**: Tabella con TN, FP, FN, TP
+- **Top 10 Features**: Importanza per permutation importance con barra di progresso
+- **Curve ROC**: Visualizzazione interattiva con Chart.js
+- **Precision-Recall Curve**: Visualizzazione interattiva con Chart.js
+- **Confronto modelli** (solo se `--compare-models` è stato usato): Tabella con metriche di cross-validation per ogni modello e delta rispetto alla baseline
 
 ## Metriche
 

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from jinja2 import Environment, FileSystemLoader
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
@@ -29,11 +30,12 @@ def evaluate_model(
     comparison_result: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """Valuta il modello - versione standalone (non metodo della classe)"""
+    # carico il csv e effettuo la validazione delle feature e delle label
     X, y, _ = QualityClassifier._load_labeled_dataset(
         csv_path, classifier.feature_names, label_column
     )
     
-    # Scaling
+    # Scaling (coerente con lo scaler usato durante il training)
     X_scaled = pd.DataFrame(
         classifier.scaler.transform(X),
         columns=classifier.feature_names,
@@ -41,13 +43,15 @@ def evaluate_model(
     )
     
     # Predizioni
+    # calcolo la probabilità della classe positiva "good", seconda colonna di predict_proba
     y_pred_proba = classifier.model.predict_proba(X_scaled)[:, 1]
+    # calcolo la predizione binaria in base alla posizione della probbilità rispetto alla soglia scelta
     y_pred = (y_pred_proba >= classifier.threshold).astype(int)
     
-    # Metriche
+    # calcolo metriche principali
     metrics = QualityClassifier._compute_binary_metrics(y, y_pred, y_pred_proba)
     
-    # Feature importance
+    # calcolo la permutation importance
     perm = permutation_importance(
         classifier.model,
         X_scaled,
@@ -56,18 +60,21 @@ def evaluate_model(
         random_state=42,
         n_jobs=-1,
     )
+    # creo un dataFrame per visualizzare i valori di importance calcolati, e li ordino dal 
+    # livello più alto di importance_mean in poi
     importance_df = pd.DataFrame({
         "feature": classifier.feature_names,
         "importance_mean": perm.importances_mean,
         "importance_std": perm.importances_std,
     }).sort_values(by="importance_mean", ascending=False)
     
-    # Curve
+    # calcolo le curve ROC e PR
     fpr, tpr, _ = roc_curve(y, y_pred_proba)
     precision_vals, recall_vals, _ = precision_recall_curve(y, y_pred_proba)
     
-    # Report
+    # genero la confusion matrix
     cm = confusion_matrix(y, y_pred)
+    # produco il report
     report_dict = classification_report(
         y, y_pred, target_names=["bad", "good"], output_dict=True, zero_division=0
     )
@@ -84,6 +91,7 @@ def evaluate_model(
         threshold=classifier.threshold,
     )
     
+    # organizzo l'output
     result = {
         "accuracy": round(metrics["accuracy"], 4),
         "balanced_accuracy": round(metrics["balanced_accuracy"], 4),
@@ -104,7 +112,7 @@ def evaluate_model(
     if comparison_result:
         result["model_comparison"] = comparison_result
     
-    # Salva se richiesto
+    # Salva se richiesto (se impostata l'output_dir)
     if output_dir:
         save_evaluation_report(result, output_dir, importance_df, fpr, tpr, precision_vals, recall_vals, classifier.model_path)
     
@@ -201,432 +209,42 @@ def _generate_html_report(
     recall_vals,
     model_path,
 ) -> str:
-
+    """
+    Genera un report HTML usando Jinja2 template.
+    
+    Carica il template dal file evaluation_report.html e lo renderizza
+    con i dati di valutazione passati come parametri.
+    """
+    # preparo i dati per il template
     cm = evaluation_result["confusion_matrix"]
+    # converto le curve in punti e li metto dentro ad un json
     roc_points = json.dumps([{"x": float(f), "y": float(t)} for f, t in zip(fpr, tpr)])
     pr_points = json.dumps([{"x": float(r), "y": float(p)} for r, p in zip(recall_vals, precision_vals)])
+    
+    # calcolo la somma delle importance_mean di ogni feature
     importance_total = float(importance_df["importance_mean"].sum()) or 1.0
+    # selezione solo le prime dieci feature per maggiore importance
+    top_features = importance_df.head(10).copy()
+    # calcolo la perecentuale dell'importance
+    top_features["importance_pct"] = (top_features["importance_mean"] / importance_total) * 100
+    
     comparison_result = evaluation_result.get("model_comparison")
-
-    html = f"""
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Report Valutazione Modello</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        :root {{
-            --bg: #f3f1ec;
-            --surface: #fffdf9;
-            --border: #d8d1c7;
-            --text: #1f1f1c;
-            --muted: #666157;
-            --accent: #2f5d50;
-            --accent-soft: #e5efe9;
-            --danger: #8e3b2f;
-            --danger-soft: #f4e5e2;
-        }}
-        body {{
-            font-family: Georgia, "Times New Roman", serif;
-            background: var(--bg);
-            color: var(--text);
-            margin: 0;
-            padding: 32px 20px;
-        }}
-        .container {{
-            max-width: 980px;
-            margin: 0 auto;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 32px;
-            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.04);
-        }}
-        h1 {{
-            margin: 0 0 12px 0;
-            font-size: 2rem;
-            font-weight: 600;
-            letter-spacing: -0.02em;
-        }}
-        h2 {{
-            margin: 32px 0 16px 0;
-            font-size: 1.15rem;
-            font-weight: 600;
-            border-top: 1px solid var(--border);
-            padding-top: 24px;
-        }}
-        p {{
-            line-height: 1.6;
-        }}
-        .intro {{
-            color: var(--muted);
-            margin: 0 0 24px 0;
-        }}
-        .meta {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 12px;
-            margin: 20px 0 8px 0;
-        }}
-        .meta-item {{
-            padding: 14px 16px;
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            background: #faf8f4;
-        }}
-        .meta-label {{
-            display: block;
-            font-size: 0.78rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-            margin-bottom: 4px;
-        }}
-        .metrics-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-            margin: 20px 0;
-        }}
-        .metric-card {{
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 18px;
-            background: #fcfbf8;
-        }}
-        .metric-card h3 {{
-            margin: 0 0 8px 0;
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--muted);
-        }}
-        .metric-card .value {{
-            font-size: 1.75rem;
-            font-weight: 600;
-            color: var(--text);
-        }}
-        .chart-container {{
-            position: relative;
-            height: 320px;
-            margin: 18px 0;
-            padding: 20px;
-            background: #faf8f4;
-            border: 1px solid var(--border);
-            border-radius: 10px;
-        }}
-        .confusion-matrix {{
-            margin: 20px 0;
-        }}
-        .confusion-matrix table {{
-            width: 100%;
-            border-collapse: collapse;
-        }}
-        .confusion-matrix th,
-        .confusion-matrix td {{
-            border: 1px solid var(--border);
-            padding: 14px;
-            text-align: center;
-        }}
-        .confusion-matrix th {{
-            background: #f6f2eb;
-            font-weight: 600;
-        }}
-        .confusion-matrix .row-label {{
-            text-align: left;
-            background: #f6f2eb;
-            font-weight: 600;
-        }}
-        .tn, .tp {{
-            background: var(--accent-soft);
-            color: var(--accent);
-            font-weight: 700;
-        }}
-        .fp, .fn {{
-            background: var(--danger-soft);
-            color: var(--danger);
-            font-weight: 700;
-        }}
-        .features-table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }}
-        .features-table th, .features-table td {{
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }}
-        .features-table th {{
-            background: #f6f2eb;
-            color: var(--text);
-            font-weight: 600;
-        }}
-        .feature-share {{
-            font-size: 0.85rem;
-            color: var(--muted);
-        }}
-        .progress-bar {{
-            width: 100%;
-            height: 10px;
-            background: #e7e1d7;
-            border-radius: 999px;
-            overflow: hidden;
-            margin-top: 6px;
-        }}
-        .progress-fill {{
-            height: 100%;
-            background: var(--accent);
-        }}
-        .timestamp {{
-            color: var(--muted);
-            font-size: 0.9rem;
-            margin-top: 28px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border);
-        }}
-        @media (max-width: 640px) {{
-            body {{
-                padding: 16px;
-            }}
-            .container {{
-                padding: 20px;
-            }}
-            .chart-container {{
-                height: 260px;
-            }}
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Report di valutazione del modello</h1>
-        <p class="intro">Sintesi delle metriche principali, della matrice di confusione e delle feature piu rilevanti emerse durante la valutazione.</p>
-
-        <div class="meta">
-            <div class="meta-item">
-                <span class="meta-label">Dataset</span>
-                <strong>{evaluation_result['csv_path']}</strong>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Modello</span>
-                <strong>{model_path}</strong>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Soglia</span>
-                <strong>{evaluation_result['threshold']}</strong>
-            </div>
-        </div>
-
-        <h2>Metriche principali</h2>
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <h3>Accuracy</h3>
-                <div class="value">{evaluation_result['accuracy']:.2%}</div>
-            </div>
-            <div class="metric-card">
-                <h3>Balanced Accuracy</h3>
-                <div class="value">{evaluation_result['balanced_accuracy']:.2%}</div>
-            </div>
-            <div class="metric-card">
-                <h3>F1-Score</h3>
-                <div class="value">{evaluation_result['f1_score']:.4f}</div>
-            </div>
-            <div class="metric-card">
-                <h3>ROC-AUC</h3>
-                <div class="value">{evaluation_result['roc_auc']:.4f}</div>
-            </div>
-        </div>
-
-        <h2>Confusion Matrix</h2>
-        <div class="confusion-matrix">
-            <table>
-                <tr>
-                    <th></th>
-                    <th>Predetto bad</th>
-                    <th>Predetto good</th>
-                </tr>
-                <tr>
-                    <td class="row-label">Reale bad</td>
-                    <td class="tn">{cm[0][0]}</td>
-                    <td class="fp">{cm[0][1]}</td>
-                </tr>
-                <tr>
-                    <td class="row-label">Reale good</td>
-                    <td class="fn">{cm[1][0]}</td>
-                    <td class="tp">{cm[1][1]}</td>
-                </tr>
-            </table>
-        </div>
-
-        <h2>Top 10 feature per importanza</h2>
-        <table class="features-table">
-            <thead>
-                <tr>
-                    <th>Feature</th>
-                    <th>Importanza media</th>
-                    <th>Dev. std.</th>
-                    <th>Peso relativo</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-    for _, row in importance_df.head(10).iterrows():
-        importance_pct = (row["importance_mean"] / importance_total) * 100
-        html += f"""
-            <tr>
-                <td><strong>{row['feature']}</strong></td>
-                <td>{row['importance_mean']:.6f}</td>
-                <td>±{row['importance_std']:.6f}</td>
-                <td>
-                    <div class="feature-share">{importance_pct:.1f}%</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: {importance_pct}%;"></div>
-                    </div>
-                </td>
-            </tr>
-"""
-        html += """
-            </tbody>
-        </table>
-
-        <h2>Curve di valutazione</h2>
-        <div class="chart-container">
-            <canvas id="rocChart"></canvas>
-        </div>
-        <div class="chart-container">
-            <canvas id="prChart"></canvas>
-        </div>
-"""
-        if comparison_result:
-            html += """
-        <h2>Confronto modelli con cross validation</h2>
-        <p class="intro">Benchmark stratificato con la stessa soglia decisionale applicata a ciascun modello. Le differenze sono espresse rispetto al modello baseline.</p>
-        <table class="features-table">
-            <thead>
-                <tr>
-                    <th>Modello</th>
-                    <th>ROC-AUC CV</th>
-                    <th>F1 CV</th>
-                    <th>Balanced Acc CV</th>
-                    <th>Delta ROC-AUC</th>
-                    <th>Delta F1</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-            for row in comparison_result["models"]:
-                html += f"""
-                <tr>
-                    <td><strong>{row['model_name']}</strong></td>
-                    <td>{row['roc_auc_mean']:.4f} ± {row['roc_auc_std']:.4f}</td>
-                    <td>{row['f1_score_mean']:.4f} ± {row['f1_score_std']:.4f}</td>
-                    <td>{row['balanced_accuracy_mean']:.4f} ± {row['balanced_accuracy_std']:.4f}</td>
-                    <td>{row['delta_vs_baseline']['roc_auc_mean']:+.4f}</td>
-                    <td>{row['delta_vs_baseline']['f1_score_mean']:+.4f}</td>
-                </tr>
-"""
-            html += """
-            </tbody>
-        </table>
-"""
-
-        html += """
-    </div>
-
-    <script>
-        const rocCtx = document.getElementById('rocChart').getContext('2d');
-        new Chart(rocCtx, {
-            type: 'scatter',
-            data: {
-                datasets: [
-                    {
-                        label: 'ROC Curve',
-                        data: """ + roc_points + """,
-                        borderColor: '#2f5d50',
-                        backgroundColor: 'rgba(47, 93, 80, 0.08)',
-                        fill: false,
-                        tension: 0,
-                        showLine: true
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    title: {
-                        display: true,
-                        text: 'ROC Curve',
-                        color: '#1f1f1c',
-                        font: { size: 16, family: 'Georgia, Times New Roman, serif' }
-                    }
-                },
-                scales: {
-                    x: {
-                        title: { display: true, text: 'False Positive Rate', color: '#666157' },
-                        min: 0,
-                        max: 1,
-                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
-                    },
-                    y: {
-                        title: { display: true, text: 'True Positive Rate', color: '#666157' },
-                        min: 0,
-                        max: 1,
-                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
-                    }
-                }
-            }
-        });
-
-        const prCtx = document.getElementById('prChart').getContext('2d');
-        new Chart(prCtx, {
-            type: 'scatter',
-            data: {
-                datasets: [
-                    {
-                        label: 'Precision-Recall Curve',
-                        data: """ + pr_points + """,
-                        borderColor: '#8e3b2f',
-                        backgroundColor: 'rgba(142, 59, 47, 0.08)',
-                        fill: false,
-                        tension: 0,
-                        showLine: true
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    title: {
-                        display: true,
-                        text: 'Precision-Recall Curve',
-                        color: '#1f1f1c',
-                        font: { size: 16, family: 'Georgia, Times New Roman, serif' }
-                    }
-                },
-                scales: {
-                    x: {
-                        title: { display: true, text: 'Recall', color: '#666157' },
-                        min: 0,
-                        max: 1,
-                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
-                    },
-                    y: {
-                        title: { display: true, text: 'Precision', color: '#666157' },
-                        min: 0,
-                        max: 1,
-                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
-                    }
-                }
-            }
-        });
-    </script>
-</body>
-</html>
-"""
-    return html
+    
+    # Configuro Jinja2
+    template_dir = os.path.dirname(__file__)
+    templates_path = os.path.join(template_dir, "templates")
+    env = Environment(loader=FileSystemLoader(templates_path))
+    template = env.get_template("evaluation_report.html")
+    
+    # Renderizza il template
+    html_content = template.render(
+        evaluation_result=evaluation_result,
+        confusion_matrix=cm.tolist(),
+        top_features=top_features,
+        roc_points=roc_points,
+        pr_points=pr_points,
+        model_path=model_path,
+        comparison_result=comparison_result,
+    )
+    
+    return html_content

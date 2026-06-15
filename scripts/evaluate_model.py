@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Script per valutare il classificatore di qualità su un dataset di test scritto in un CSV.
 Sono necessarie le label, quindi bisogna generare il CSV su un dataset con label presenti.
@@ -168,6 +167,7 @@ def main():
         print(f"Errore: Modello non trovato: {args.model}")
         sys.exit(1)
 
+    # carico i metadata del modello (artifact salvati con esso)
     model_metadata = load_model_metadata(args.model)
     training_metadata = model_metadata.get("training_metadata", {})
     resolved_test_csv = resolve_test_csv(args.test_csv, training_metadata)

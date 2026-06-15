@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Valutazione Modello</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #f3f1ec;
+            --surface: #fffdf9;
+            --border: #d8d1c7;
+            --text: #1f1f1c;
+            --muted: #666157;
+            --accent: #2f5d50;
+            --accent-soft: #e5efe9;
+            --danger: #8e3b2f;
+            --danger-soft: #f4e5e2;
+        }
+        body {
+            font-family: Georgia, "Times New Roman", serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 32px 20px;
+        }
+        .container {
+            max-width: 980px;
+            margin: 0 auto;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 32px;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.04);
+        }
+        h1 {
+            margin: 0 0 12px 0;
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+        h2 {
+            margin: 32px 0 16px 0;
+            font-size: 1.15rem;
+            font-weight: 600;
+            border-top: 1px solid var(--border);
+            padding-top: 24px;
+        }
+        p {
+            line-height: 1.6;
+        }
+        .intro {
+            color: var(--muted);
+            margin: 0 0 24px 0;
+        }
+        .meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin: 20px 0 8px 0;
+        }
+        .meta-item {
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #faf8f4;
+        }
+        .meta-label {
+            display: block;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin: 20px 0;
+        }
+        .metric-card {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            background: #fcfbf8;
+        }
+        .metric-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--muted);
+        }
+        .metric-card .value {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .chart-container {
+            position: relative;
+            height: 320px;
+            margin: 18px 0;
+            padding: 20px;
+            background: #faf8f4;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+        .confusion-matrix {
+            margin: 20px 0;
+        }
+        .confusion-matrix table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .confusion-matrix th,
+        .confusion-matrix td {
+            border: 1px solid var(--border);
+            padding: 14px;
+            text-align: center;
+        }
+        .confusion-matrix th {
+            background: #f6f2eb;
+            font-weight: 600;
+        }
+        .confusion-matrix .row-label {
+            text-align: left;
+            background: #f6f2eb;
+            font-weight: 600;
+        }
+        .tn, .tp {
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-weight: 700;
+        }
+        .fp, .fn {
+            background: var(--danger-soft);
+            color: var(--danger);
+            font-weight: 700;
+        }
+        .features-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .features-table th, .features-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .features-table th {
+            background: #f6f2eb;
+            color: var(--text);
+            font-weight: 600;
+        }
+        .feature-share {
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #e7e1d7;
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+        }
+        .timestamp {
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+        @media (max-width: 640px) {
+            body {
+                padding: 16px;
+            }
+            .container {
+                padding: 20px;
+            }
+            .chart-container {
+                height: 260px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Report di valutazione del modello</h1>
+        <p class="intro">Sintesi delle metriche principali, della matrice di confusione e delle feature piu rilevanti emerse durante la valutazione.</p>
+
+        <div class="meta">
+            <div class="meta-item">
+                <span class="meta-label">Dataset</span>
+                <strong>{{ evaluation_result.csv_path }}</strong>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Modello</span>
+                <strong>{{ model_path }}</strong>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Soglia</span>
+                <strong>{{ evaluation_result.threshold }}</strong>
+            </div>
+        </div>
+
+        <h2>Metriche principali</h2>
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <h3>Accuracy</h3>
+                <div class="value">{{ "%.2%"|format(evaluation_result.accuracy) }}</div>
+            </div>
+            <div class="metric-card">
+                <h3>Balanced Accuracy</h3>
+                <div class="value">{{ "%.2%"|format(evaluation_result.balanced_accuracy) }}</div>
+            </div>
+            <div class="metric-card">
+                <h3>F1-Score</h3>
+                <div class="value">{{ "%.4f"|format(evaluation_result.f1_score) }}</div>
+            </div>
+            <div class="metric-card">
+                <h3>ROC-AUC</h3>
+                <div class="value">{{ "%.4f"|format(evaluation_result.roc_auc) }}</div>
+            </div>
+        </div>
+
+        <h2>Confusion Matrix</h2>
+        <div class="confusion-matrix">
+            <table>
+                <tr>
+                    <th></th>
+                    <th>Predetto bad</th>
+                    <th>Predetto good</th>
+                </tr>
+                <tr>
+                    <td class="row-label">Reale bad</td>
+                    <td class="tn">{{ confusion_matrix[0][0] }}</td>
+                    <td class="fp">{{ confusion_matrix[0][1] }}</td>
+                </tr>
+                <tr>
+                    <td class="row-label">Reale good</td>
+                    <td class="fn">{{ confusion_matrix[1][0] }}</td>
+                    <td class="tp">{{ confusion_matrix[1][1] }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <h2>Top 10 feature per importanza</h2>
+        <table class="features-table">
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>Importanza media</th>
+                    <th>Dev. std.</th>
+                    <th>Peso relativo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for _, row in top_features.iterrows() %}
+                <tr>
+                    <td><strong>{{ row.feature }}</strong></td>
+                    <td>{{ "%.6f"|format(row.importance_mean) }}</td>
+                    <td>±{{ "%.6f"|format(row.importance_std) }}</td>
+                    <td>
+                        <div class="feature-share">{{ "%.1f%%"|format(row.importance_pct) }}</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: {{ row.importance_pct }}%;"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h2>Curve di valutazione</h2>
+        <div class="chart-container">
+            <canvas id="rocChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="prChart"></canvas>
+        </div>
+
+        {% if comparison_result %}
+        <h2>Confronto modelli con cross validation</h2>
+        <p class="intro">Benchmark stratificato con la stessa soglia decisionale applicata a ciascun modello. Le differenze sono espresse rispetto al modello baseline.</p>
+        <table class="features-table">
+            <thead>
+                <tr>
+                    <th>Modello</th>
+                    <th>ROC-AUC CV</th>
+                    <th>F1 CV</th>
+                    <th>Balanced Acc CV</th>
+                    <th>Delta ROC-AUC</th>
+                    <th>Delta F1</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in comparison_result.models %}
+                <tr>
+                    <td><strong>{{ row.model_name }}</strong></td>
+                    <td>{{ "%.4f"|format(row.roc_auc_mean) }} ± {{ "%.4f"|format(row.roc_auc_std) }}</td>
+                    <td>{{ "%.4f"|format(row.f1_score_mean) }} ± {{ "%.4f"|format(row.f1_score_std) }}</td>
+                    <td>{{ "%.4f"|format(row.balanced_accuracy_mean) }} ± {{ "%.4f"|format(row.balanced_accuracy_std) }}</td>
+                    <td>{{ "%+.4f"|format(row.delta_vs_baseline.roc_auc_mean) }}</td>
+                    <td>{{ "%+.4f"|format(row.delta_vs_baseline.f1_score_mean) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+
+    <script>
+        const rocCtx = document.getElementById('rocChart').getContext('2d');
+        new Chart(rocCtx, {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    {
+                        label: 'ROC Curve',
+                        data: {{ roc_points|safe }},
+                        borderColor: '#2f5d50',
+                        backgroundColor: 'rgba(47, 93, 80, 0.08)',
+                        fill: false,
+                        tension: 0,
+                        showLine: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: 'ROC Curve',
+                        color: '#1f1f1c',
+                        font: { size: 16, family: 'Georgia, Times New Roman, serif' }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'False Positive Rate', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'True Positive Rate', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    }
+                }
+            }
+        });
+
+        const prCtx = document.getElementById('prChart').getContext('2d');
+        new Chart(prCtx, {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    {
+                        label: 'Precision-Recall Curve',
+                        data: {{ pr_points|safe }},
+                        borderColor: '#8e3b2f',
+                        backgroundColor: 'rgba(142, 59, 47, 0.08)',
+                        fill: false,
+                        tension: 0,
+                        showLine: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: 'Precision-Recall Curve',
+                        color: '#1f1f1c',
+                        font: { size: 16, family: 'Georgia, Times New Roman, serif' }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Recall', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Precision', color: '#666157' },
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(0, 0, 0, 0.06)' }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

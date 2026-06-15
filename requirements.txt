@@ -17,6 +17,7 @@ aiohttp-cors==0.8.1
 tokenizers==0.22.2
 
 lightgbm    # for machine learning models in classifiers
+jinja2       # for HTML template rendering
 
 # trafilatura  # for web crawling and content extraction
 

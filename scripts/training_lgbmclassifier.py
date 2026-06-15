@@ -20,14 +20,15 @@ Questo script:
 4. Salva tutte e 3 le parti per usi futuri (es. per valutazione performance del modello)
 """
 
-# === Percorsi ===
+# Percorsi
 csv_path = os.path.join(project_root, "output", "feature", "doc_stats_per_file.csv")
 if not os.path.exists(csv_path):
     print("Errore: file CSV non trovato.")
     print(f"Percorso atteso: {csv_path}")
     print("Esegui prima la pipeline su un dataset etichettato così che genera un dataset formato csv. Utilizza docker compose up --build")
     sys.exit(1)
-output_dir = os.path.join(project_root, "data", "splits")
+# creo il percorso alla cartella dove contenere lo split del dataset
+output_dir = os.path.join(project_root, "models", "splits")
 # scrivo i valori di default per il random_state e la threshold
 random_state = 42
 validation_threshold = 0.65
@@ -35,20 +36,22 @@ validation_threshold = 0.65
 # Se non esiste, creo la cartella che ospiterà i 3 datasets
 os.makedirs(output_dir, exist_ok=True)
 
-# === STEP 1: Leggere il dataset completo ===
+# 1. Leggere il dataset completo in formato csv (quindi le feature relative ai documenti) 
 print("Caricamento dataset...")
 print(f"   Percorso: {csv_path}")
 df = pd.read_csv(csv_path)
 print(f"   Totale documenti: {len(df)}")
 
-# === STEP 2: Split 70% train, 15% val, 15% test ===
+# 2. Split 70% train, 15% val, 15% test 
 print("\nSplitting dataset (70% train, 15% val, 15% test)...")
+# divido il dataset in train_df(70%) e temp_df(30%) che andra ulteriormente diviso
 train_df, temp_df = train_test_split(
     df,
     test_size=0.3,
     stratify=df["label"],
     random_state=random_state,
 )
+# divido temp_df in val_df (15%) e test_df(15%)
 val_df, test_df = train_test_split(
     temp_df,
     test_size=0.5,
@@ -60,7 +63,7 @@ print(f"   Train: {len(train_df)} documenti ({len(train_df)/len(df)*100:.1f}%)")
 print(f"   Val:   {len(val_df)} documenti ({len(val_df)/len(df)*100:.1f}%)")
 print(f"   Test:  {len(test_df)} documenti ({len(test_df)/len(df)*100:.1f}%)")
 
-# === STEP 3: Salva i tre set ===
+# 3. Salva i tre set
 print(f"\nSalvataggio dei dataset splittati in: {output_dir}")
 train_csv = os.path.join(output_dir, "doc_stats_train.csv")
 val_csv = os.path.join(output_dir, "doc_stats_val.csv")
@@ -74,7 +77,7 @@ print(f"Training: {train_csv}")
 print(f"Validation: {val_csv}")
 print(f"Test: {test_csv}")
 
-# === STEP 4: Allenare il modello sul training set ===
+# 4. Allenare il modello sul training set
 print("\nAddestramento del modello...")
 result = QualityClassifier.train_from_csv(
     csv_path=train_csv,
@@ -82,7 +85,7 @@ result = QualityClassifier.train_from_csv(
     threshold=validation_threshold,
     random_state=random_state,
 )
-# scrivo metadata possibilmente utili in futuro
+# scrivo metadata utili in futuro
 result["training_metadata"] = {
     "source_csv": os.path.abspath(csv_path),
     "train_csv": os.path.abspath(train_csv),
@@ -99,14 +102,13 @@ result["training_metadata"] = {
     "validation_threshold": validation_threshold,
 }
 
-# === STEP 5: Salvo il modello ===
+# 5. Salvo il modello 
 print("\nSalvataggio del modello...")
 saving_path = os.path.join(project_root, "models", "lgbm_quality_model.joblib")
 # saving_path = os.path.join(project_root, "models", "modello_di_prova.joblib")
 os.makedirs(os.path.dirname(saving_path), exist_ok=True)
-# QualityClassifier.save_model(result, saving_path)
 try:
-    QualityClassifier.save_model(result, "models/my_model.joblib")
+    QualityClassifier.save_model(result, saving_path)
 except (ValueError, KeyError, RuntimeError) as e:
     print(f"Salvataggio fallito: {e}")
 

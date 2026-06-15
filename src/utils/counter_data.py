@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Count good/bad labels in JSONL shards and report dataset imbalance.
 
