@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, Pattern, Sequence, Set
 
 
-# Dizionari utilizzati per il calcolo delle feature
+# Dizionari utilizzati per il calcolo delle feature spam
 
 DELIVERY_BRANDS: Set[str] = {
     "sda", "bartolini", "brt", "dpd", "gls",
@@ -229,7 +229,7 @@ URL_SHORTENERS: Set[str] = {
 }
 
 
-# Regex utilizzate per il calcolo delle features
+# Regex utilizzate per il calcolo delle feature spam
 
 WORD_RE: Pattern[str] = re.compile(r"\b[\wÀ-ÖØ-öø-ÿ'-]+\b", re.UNICODE)
 
@@ -333,10 +333,10 @@ def normalize_for_matching(text: str) -> str:
 
 def count_term_matches(normalized_text: str, terms: Iterable[str]) -> int:
     """
-    Contenitore dei conteggi lessicali usati nella feature extraction spam.
-    I campi rappresentano gruppi semantici distinti, come keyword promozionali,
-    urgenza, denaro, Call To Action, sicurezza, consegna, brand e unsubscribe.
-    Questi conteggi vengono poi trasformati in feature numeriche.
+    Conta le occorrenze dei termini nel testo normalizzato.
+
+    Il testo e i termini vengono normalizzati prima del confronto, così da rendere il matching più robusto rispetto a 
+    maiuscole, accenti, apostrofi, punteggiatura e spazi multipli.
     """
     total = 0
     padded = f" {normalize_for_matching(normalized_text)} "
@@ -510,6 +510,10 @@ def count_safe_security_ham_terms(text: str) -> int:
 def quick_pattern_counts(text: str) -> Dict[str, int]:
     """
     Estrae pattern strutturali rilevanti per il rilevamento spam.
+
+    La funzione calcola conteggi relativi a URL, email, domini, TLD sospetti, shortener, importi economici, 
+    codici promozionali, CTA e combinazioni tra link, urgenza, denaro e brand. 
+    Include anche segnali ham/business utili a ridurre i falsi positivi.
     """
     emails = list(extract_emails(text))
     urls = list(extract_urls(text))

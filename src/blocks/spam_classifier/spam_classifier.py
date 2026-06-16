@@ -125,7 +125,8 @@ class SpamClassifier(PipelineStep):
         self.scaler: StandardScaler = artifact["scaler"]
         self._feature_names_train: List[str] = artifact.get("feature_names", DEFAULT_FEATURE_NAMES)
 
-        #se la trashold non è impostata usa come predefinito 0.75
+        # Se non viene passata una soglia esplicita, usa quella salvata nell'artifact del modello; 
+        # in assenza del valore, usa 0.75.
         saved_threshold = artifact.get("threshold", 0.75)
         self.threshold = float(saved_threshold if threshold is None else threshold)
 
@@ -211,6 +212,12 @@ class SpamClassifier(PipelineStep):
     
     @staticmethod
     def _resolve_label_column(df: pd.DataFrame, label_column: Optional[str] = None) -> str:
+        """
+        Individua la colonna da usare come label spam/ham.
+
+        Se viene fornito un nome di colonna esplicito, verifica che sia presente nel CSV. 
+        In caso contrario prova le colonne label previste dal progetto.
+        """
         if label_column:
             if label_column not in df.columns:
                 raise ValueError(f"Colonna label '{label_column}' non trovata nel CSV")
@@ -226,8 +233,10 @@ class SpamClassifier(PipelineStep):
     @staticmethod
     def _resolve_feature_names(df: pd.DataFrame, feature_names: Optional[List[str]] = None) -> List[str]:
         """
-        Individua la colonna da usare come label spam/ham.
-        La funzione consente di gestire CSV provenienti da fonti diverse, nei quali la label può avere nomi differenti.
+        Individua le feature utilizzabili per il training o l'inferenza.
+
+        Se viene fornita una lista esplicita di feature, mantiene solo quelle presenti nel CSV. 
+        In caso contrario usa l'elenco predefinito delle feature ammesse, escludendo colonne non informative o non utilizzabili dal modello.
         """
         requested = feature_names or DEFAULT_FEATURE_NAMES
         available = [c for c in requested if c in df.columns]
@@ -240,7 +249,10 @@ class SpamClassifier(PipelineStep):
     @staticmethod
     def _drop_bad_features(X: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
         """
-        serve per rimuovere features costanti, non utili al training o che renderebbero troppo facile il training.
+        Rimuove le feature costanti e segnala quelle quasi costanti.
+
+        Le feature prive di variabilità non aggiungono informazione al modello e possono rendere meno stabile la valutazione. 
+        Le feature quasi costanti non vengono eliminate automaticamente, ma vengono riportate per analisi.
         """
 
         constant_cols = [c for c in X.columns if X[c].nunique(dropna=False) <= 1]
@@ -251,7 +263,6 @@ class SpamClassifier(PipelineStep):
             if not vc.empty and vc.iloc[0] >= 0.995:
                 near_constant_cols.append(c)
 
-        # le quasi costanti non vengono buttate in automatico ma segnalate
         remove_cols = sorted(set(constant_cols))
         keep = [c for c in X.columns if c not in remove_cols]
 
@@ -549,6 +560,11 @@ class SpamClassifier(PipelineStep):
 
     @staticmethod
     def save_model(result: dict, output_path: str):
+        """
+        Salva l'artifact del classificatore spam.
+
+        L'artifact contiene modello, scaler, feature usate nel training, colonna label, soglia decisionale e metadati di addestramento.
+        """
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         artifact = {
             "model": result["model"],

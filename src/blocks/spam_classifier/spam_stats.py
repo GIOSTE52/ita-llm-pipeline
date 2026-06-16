@@ -118,6 +118,12 @@ def _sentence_chunks(text: str) -> list[str]:
     return [c.strip() for c in chunks if c.strip()]
 
 def compute_custom_lang_score(text: str, metadata: dict | None = None) -> float:
+    """
+    Calcola uno score linguistico custom per stimare la qualità del testo italiano.
+
+    Lo score combina segnali come rapporto di caratteri alfabetici, presenza di stopword italiane, parole comuni, 
+    lunghezza media dei token, struttura delle frasi e penalità per eccesso di cifre, punteggiatura o token molto brevi.
+    """
     metadata = metadata or {}
     text = _safe_text(text).strip()
 
@@ -296,7 +302,8 @@ def extract_spam_features(doc) -> Dict[str, float | str]:
     url_count = float(pat["url_count"])
     email_count = float(pat["email_count"])
 
-    # booleane leggere che spesso rendono più delle feature singole
+    # Feature booleane derivate da combinazioni di segnali.
+    # Spesso catturano pattern spam meglio dei singoli conteggi isolati.
     has_link_and_cta = 1.0 if (pat["url_count"] > 0 and pat["action_phrase_count"] > 0) else 0.0
     has_urgency_and_cta = 1.0 if (kw.urgency_keywords > 0 and pat["action_phrase_count"] > 0) else 0.0
     has_brand_and_link = 1.0 if (kw.brand_keywords > 0 and pat["url_count"] > 0) else 0.0
