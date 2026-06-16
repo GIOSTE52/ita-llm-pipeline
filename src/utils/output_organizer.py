@@ -3,6 +3,17 @@ import os
 import glob
 
 def output_classification(rejected_dir, output_base_dir):
+
+    """
+    Classifica e smista i file JSONL scartati in base alla loro etichetta (label).
+    
+    Legge ricorsivamente tutti i file JSONL dalla directory rejected_dir, estrae la label
+    dal campo metadata, e scrive gli oggetti in due file di output separati:
+    - rejected_was_good.jsonl: contiene gli oggetti etichettati come 'good'
+    - rejected_was_bad.jsonl: contiene gli oggetti con etichette diverse da 'good'
+    """
+
+
     insp_dir = os.path.join(output_base_dir, "inspection")
     os.makedirs(insp_dir, exist_ok=True)
     

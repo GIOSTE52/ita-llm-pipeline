@@ -30,27 +30,47 @@ def aggregate_rank_csvs(
     - controlla che gli header siano coerenti
     - funziona sia su Linux sia su Windows
     - rimuove i file temporanei se remove_parts=True
+
+    Args:
+        feature_dir (str): Directory contenente i file CSV temporanei.
+        final_name (str): Nome del file finale (es: 'doc_stats_per_file.csv').
+        label (Optional[str]): Etichetta descrittiva per i messaggi di log. 
+                              Se None, usa final_name.
+        remove_parts (bool): Se True, rimuove i file temporanei dopo l'aggregazione.
+
+    Returns:
+        bool: True se l'aggregazione è completata con successo, False altrimenti.
     """
 
+    # Aumenta il limite di dimensione dei campi CSV per gestire file molto grandi
     csv.field_size_limit(sys.maxsize)
+
+    # Usa final_name come label se non è specificata
     label = label or final_name
 
     print("\n" + "=" * 60)
     print(f"AGGREGAZIONE FINALE CSV: {final_name}")
     print("=" * 60)
 
+    # Crea la directory feature_dir se non esiste
     os.makedirs(feature_dir, exist_ok=True)
 
+    # Costruisce il pattern per trovare i file temporanei (rank_*_<final_name>)
     temp_pattern = os.path.join(feature_dir, f"rank_*_{final_name}")
+
+    # Recupera tutti i file che corrispondono al pattern e li ordina
     temp_files = sorted(glob.glob(temp_pattern))
 
+     # Controlla se sono stati trovati file temporanei
     if not temp_files:
         print(f"[INFO] Nessun CSV temporaneo trovato per {label}.")
         print(f"[INFO] Pattern cercato: {temp_pattern}")
         return False
 
+    # Definisce il percorso del file CSV finale da generare
     final_output_csv = os.path.join(feature_dir, final_name)
 
+     # Variabili per tracciare header e numero di righe
     header = None
     total_rows = 0
 
@@ -58,11 +78,12 @@ def aggregate_rank_csvs(
         with open(final_output_csv, "w", newline="", encoding="utf-8") as fout:
             writer = None
 
+            # Itera su tutti i file temporanei ordinati
             for path in temp_files:
                 if not os.path.exists(path) or os.path.getsize(path) == 0:
                     print(f"[WARN] File vuoto o inesistente, salto: {path}")
                     continue
-
+                # Apre ogni file temporaneo in lettura
                 with open(path, "r", newline="", encoding="utf-8") as fin:
                     reader = csv.reader(fin)
 
@@ -71,11 +92,13 @@ def aggregate_rank_csvs(
                     except StopIteration:
                         print(f"[WARN] File senza header, salto: {path}")
                         continue
-
+                        
+                    # Se è il primo file, salva l'header come riferimento
                     if header is None:
                         header = current_header
                         writer = csv.writer(fout)
                         writer.writerow(header)
+                    # Verifica che gli header di tutti i file siano coerenti
                     elif current_header != header:
                         raise ValueError(
                             "Header CSV non coerente tra file temporanei.\n"
@@ -83,7 +106,7 @@ def aggregate_rank_csvs(
                             f"Header atteso: {header}\n"
                             f"Header trovato: {current_header}"
                         )
-
+                    # Itera su tutte le righe dati del file temporaneo
                     for row in reader:
                         if not row:
                             continue
@@ -95,6 +118,7 @@ def aggregate_rank_csvs(
         print(f"[OK] File temporanei uniti: {len(temp_files)}")
         print(f"[OK] Righe dati scritte: {total_rows}")
 
+        # Se richiesto, rimuove i file temporanei
         if remove_parts:
             for path in temp_files:
                 try:
@@ -107,5 +131,6 @@ def aggregate_rank_csvs(
         return True
 
     except Exception as e:
+        # In caso di errore, stampa il messaggio e ritorna False
         print(f"[ERRORE] Aggregazione CSV {label} fallita: {e}")
         return False
