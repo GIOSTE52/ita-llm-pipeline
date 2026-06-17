@@ -132,7 +132,7 @@ class QualityClassifier(PipelineStep):
         self,
         model_path: str,
         feature_names: Optional[List[str]] = None,
-        threshold: float = 0.5,
+        threshold: float = 0.65,
     ):
         super().__init__()
         # Percorso al modello salvato
