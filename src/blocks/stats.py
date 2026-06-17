@@ -21,6 +21,7 @@ RE_REPEATED_SEQ = re.compile(r"(\b\w+\b\s+)\1+", re.IGNORECASE) # Rileva parole 
 RE_SPACES = re.compile(r" {2,}")
 RE_PUNC_SEQ = re.compile(r"[.!?,;:]{2,}")
 RE_ELIPSIS = re.compile(r"\.\.\.|…")
+RE_URL = re.compile(r"https?://[^\s)>\]\"\'\}]*")
 
 # Lista di stopword italiane per il calcolo della stopword_ratio.
 # Fondamentale per distinguere testi naturali da liste di parole o contenuti spazzatura.
