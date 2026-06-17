@@ -84,6 +84,7 @@ ita-llm-pipeline/
 │   │       └── spam_stats.py
 │   └── utils/
 │       ├── csv_aggregator.py           # Aggregazione CSV
+|       ├── fix_rpDataset.py            # Standardizza il dataset di RedPajama per lo scopo di questa pipeline
 │       └── output_organizer.py         # Organizzazione output
 │
 └── scripts/
@@ -113,7 +114,7 @@ ita-llm-pipeline/
 
 ## Configurazione
 
-La pipeline legge configurazione da **3 fonti** (in ordine di precedenza):
+La pipeline legge le variabili di configurazione da **3 fonti** (in ordine di precedenza):
 1. **Argomenti CLI** (`--root-dir`, `--output-dir`, etc.)
 2. **File `.conf`** in `configs/` (caricato con `--config`)
 3. **Default interni** nel codice
@@ -143,27 +144,99 @@ In `configs/`:
 
 ## Gestione Dataset (Interno vs Esterno)
 
-`config_loader.get_config()` usa come pattern input fisso `INPUT_SUB_PATTERN = train/*.jsonl`. Per cambiare la scelta del dataset in input, bisogna modificarlo manualmente nel file `src/config_loader.py`.
+La pipeline supporta due modalità di input dati, controllate dal flag **`USE_EXTERNAL_DATA`** in `src/config_loader.py`. Questo meccanismo permette di scegliere facilmente se usare i dati contenuti nella repository o puntare a una cartella esterna.
 
 ### 1. Utilizzo Dataset della Repository (Default)
 
-Per utilizzare i file contenuti in `data/train/*.jsonl`:
-- Nel file `src/config_loader.py`, imposta: `USE_EXTERNAL_DATA = False`.
-- (Opzionale) Nel `docker-compose.yml`, puoi lasciare commentata la riga del volume esterno.
+**Modalità**: Esecuzione locale con dati contenuti in `data/dataset/*.jsonl`
 
-### 2. Utilizzo Dataset Esterno (Locale)
+```python
+# In src/config_loader.py
+USE_EXTERNAL_DATA = False
+```
 
-Per puntare a una cartella esterna (es. un disco rigido o la Scrivania) senza spostare i file:
-1. **Docker Compose**: Decommenta o aggiungi la riga del volume nel servizio `pipeline`:
+Quando `USE_EXTERNAL_DATA = False`:
+- `DATA_DIR` = `ROOT_DIR/data` (punta sempre a `./data`)
+- `INPUT_SUB_PATTERN` = `dataset/*.jsonl` (per default, configurabile)
+- La pipeline legge gli JSONL dalla repository
+
+**Comandi**:
+```bash
+# Locale
+python3 src/main.py --root-dir . --output-dir ./output
+
+# Docker (già configurato)
+docker compose up --build
+```
+
+### 2. Utilizzo Dataset Esterno (Dischi Esterni, Percorsi Alternativi)
+
+**Modalità**: Puntare a una cartella esterna senza spostare i file.
+
+```python
+# In src/config_loader.py
+USE_EXTERNAL_DATA = True
+```
+
+Quando `USE_EXTERNAL_DATA = True`:
+- `DATA_DIR` = `/app/external_data` (o il percorso specificato)
+- `INPUT_SUB_PATTERN` = `*.jsonl` 
+- La pipeline legge JSONL dal volume montato
+
+**Setup per Docker Compose**:
+
+1. Apri `docker-compose.yml` e modifica il servizio `pipeline`:
    ```yaml
-   volumes:
-     - /tuo/percorso/sul/pc:/app/external_data:ro
+   services:
+     pipeline:
+       # ...
+       volumes:
+         - /tuo/percorso/locale:/app/external_data:ro
+         - ./output:/app/output:rw
    ```
+   Sostituisci `/tuo/percorso/locale` con il percorso reale 
+
+2. Imposta il flag in `src/config_loader.py`:
+   ```python
+   USE_EXTERNAL_DATA = True
+   ```
+
+3. Esegui:
+   ```bash
+   docker compose up --build
+   ```
+
+**Setup per esecuzione locale**:
+
+1. Imposta il flag in `src/config_loader.py`:
+   ```python
+   USE_EXTERNAL_DATA = True
+   ```
+
+2. Esegui con il percorso esterno:
+   ```bash
+   python3 src/main.py \
+     --root-dir . \
+     --data-dir /percorso/personalizzato \
+     --output-dir ./output
+   ```
+
+### 3. Personalizzazione Pattern Input
+
+Se vuoi leggere solo un sottoinsieme di file, modifica `INPUT_SUB_PATTERN` in `src/config_loader.py`:
+
+```python
+# Legge tutti i JSONL in data/
+INPUT_SUB_PATTERN = "*.jsonl"
+
+# Legge da shard specifici
+INPUT_SUB_PATTERN = "train/shard_0{0..5}.jsonl" 
+```
 
 ### Note Operative
 
-- `NUM_TASKS` viene calcolato contando i file che matchano `DATA_DIR/INPUT_SUB_PATTERN`.
-- `--tasks` viene parsato dalla CLI e sovrascrive `NUM_TASKS` se specificato.
+- **`NUM_TASKS`** viene calcolato contando automaticamente i file che matchano `DATA_DIR/INPUT_SUB_PATTERN`
+- **`--tasks`** dalla CLI sovrascrive il conteggio automatico se specificato: `python3 src/main.py --tasks 100`
 
 ## Esecuzione
 
@@ -264,36 +337,115 @@ Dopo l'esecuzione della pipeline, `src/main.py` esegue anche:
 
 ## Output prodotti
 
-Struttura tipica:
+### Struttura Directory Output
+
+Struttura tipica dopo un esecuzione:
 
 ```text
 output/
-├── italiano_pulito_${rank}.jsonl
-├── feature/
-│   └── doc_stats_per_file.csv
-|   └── spam_doc_features.csv
-├── inspection/
-│   ├── rejected_was_bad.jsonl
-│   └── rejected_was_good.jsonl
-└── rejected/
+├── italiano_pulito_${rank}.jsonl          # Documenti passati tutti i filtri (VALIDI)
+├── feature/                               # CSV aggregati
+│   ├── doc_stats_per_file.csv             # Feature qualità aggregato
+│   └── spam_doc_features.csv              # Feature spam aggregato
+├── inspection/                            # Analisi scarti post-run
+│   ├── rejected_was_bad.jsonl             # Scarti corretti (false negative evitati)
+│   └── rejected_was_good.jsonl            # Falsi scarti (false positive)
+└── rejected/                              # Documenti scartati per fase
     ├── 1_language/
-    │   └── non_italiano_${rank}.jsonl
+    │   └── non_italiano_${rank}.jsonl     # Language score < 0.75
     ├── 2_spam/
-    │   └── spam_rejected_${rank}.jsonl
+    │   └── spam_rejected_${rank}.jsonl    # Spam classifier score > 0.75
     └── 3_quality/
-        └── quality_rejectd_${rank}.jsonl
+        └── quality_rejected_${rank}.jsonl # Quality classifier score < 0.65
 ```
 
-`doc_stats_per_file.csv` contiene, tra le altre, queste feature:
+### File CSV di Output: Feature Quality
 
-- `language_score`
-- `length`
-- `word_count`
-- `text_entropy`
-- `url_count`
-- `email_count`
-- `unique_word_ratio`
-- `consecutive_punctuation_count`
+**File**: `output/feature/doc_stats_per_file.csv`
+
+Questo CSV contiene le feature estratte da ogni documento **processato** (prima della classificazione) e serve sia per:
+1. **Input al QualityClassifier** per predire la qualità
+2. **Analisi post-processing** delle statistiche documentali
+
+**Colonne principali**:
+
+| Feature | Tipo | Interpretazione |
+|---------|------|------------------|
+| `doc_id` | str | ID univoco documento |
+| `language_score` | float (0-1) | Confidence lingua italiana (fastText) |
+| `length` | int | Lunghezza testo in caratteri |
+| `word_count` | int | Numero di token (words) |
+| `text_entropy` | float | Entropia Shannon del testo (diversità) |
+| `url_count` | int | Numero di URL nel testo |
+| `email_count` | int | Numero di indirizzi email |
+| `unique_word_ratio` | float (0-1) | Rapporto parole uniche / totali |
+| `consecutive_punctuation_count` | int | Sequenze di punteggiatura consecutive |
+| `punctuation_ratio` | float (0-1) | Rapporto punteggiatura / lunghezza |
+
+**Utilizzo tipico**:
+```bash
+# Analizzare le statistiche
+python3 -c "
+import pandas as pd
+df = pd.read_csv('output/feature/doc_stats_per_file.csv')
+
+# Statistiche descrittive
+print(df[['language_score', 'text_entropy', 'word_count', 'unique_word_ratio']].describe())
+
+# Documenti anomali
+print('\nDocumenti con scarsa diversità lessicale:')
+print(df[df['unique_word_ratio'] < 0.3])
+"
+```
+
+### File CSV di Output: Feature Spam
+
+**File**: `output/feature/spam_doc_features.csv`
+
+Questo CSV contiene le feature estratte specificamente per il **SpamClassifier**. Viene usato sia per:
+1. **Input al SpamFilter** per predire probabilità spam
+2. **Training/Valutazione** del modello spam in `scripts/training_spam_lgbmclassifier.py`
+
+**Colonne principali**:
+
+| Feature | Tipo | Interpretazione |
+|---------|------|------------------|
+| `doc_id` | str | ID univoco documento |
+| `keyword_count` | int | Numero keyword spam rilevate |
+| `keyword_density` | float (0-1) | Percentuale keyword spam nel testo |
+| `suspicious_chars_ratio` | float (0-1) | Rapporto caratteri sospetti / lunghezza |
+| `repetition_score` | float | Score ripetizioni parole/sequenze |
+| `url_spam_ratio` | float (0-1) | Rapporto URL sospetti / URL totali |
+| `email_spam_ratio` | float (0-1) | Rapporto email spam-like / email totali |
+
+**Utilizzo tipico**:
+```bash
+# Analizzare prevalenza spam
+python3 -c "
+import pandas as pd
+df = pd.read_csv('output/feature/spam_doc_features.csv')
+
+# Quanto spam è stato rilevato
+print('Distribuzione keyword spam:')
+print(df['keyword_count'].value_counts())
+
+# Correlazione con classificazione
+print('\nDocumenti ad alta densità di keyword spam:')
+print(df[df['keyword_density'] > 0.5])
+"
+```
+
+### Quando i CSV vengono generati
+
+Nella pipeline (`src/pipeline_factory.py`), i CSV vengono scritti **per-rank** durante l'esecuzione:
+- **`rank_*_doc_stats_per_file.csv`** - Feature quality aggregati dal blocco `DocStatsCsv()`
+- **`rank_*_spam_doc_features.csv`** - Feature spam dal blocco `SpamFeatureCsvWriter()`
+
+Al termine dell'esecuzione, `src/main.py` chiama `aggregate_rank_csvs()` che:
+1. Legge tutti i file per-rank
+2. Li concatena in un unico CSV
+3. Salva come `doc_stats_per_file.csv` e `spam_doc_features.csv`
+4. Rimuove i file temporanei (se `remove_parts=True`)
 
 ## Analisi Risultati
 
