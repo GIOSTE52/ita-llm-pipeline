@@ -1,4 +1,4 @@
-#version: "3.8"
+version: "3.8"
 
 services:
   pipeline:
@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      #aggiungi path se vuoi usare dataset esterno
-      - /home/user/external_data:/app/external_data:ro
+      # aggiungi path come segue se vuoi usare dataset esterno
+      # - /home/user/external_data:/app/external_data:ro
 
       # Dati in input (read-only)
       - ./data:/app/data:ro
@@ -20,6 +20,7 @@ services:
       - DATATROVE_COLORIZE_LOGS=1
       - DATATROVE_COLORIZE_LOG_FILES=1
     command: ["python3", "src/main.py", "--config", "configs/default.conf"]
+    # Sostituendo con il seguente comando è possibile assegnare il file config personalizzato dall'utente
     # command: ["python3", "src/main.py", "--config", "configs/user.conf"]
 
 volumes:

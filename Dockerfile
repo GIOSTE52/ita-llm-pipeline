@@ -15,8 +15,9 @@ COPY src/ ./src/
 COPY configs/ ./configs/
 COPY models/ ./models
 
+# creo le cartelle per non riscontrare errori
 RUN mkdir -p /app/output /app/logs 
 
-#Le variabili di environment le manteniamo nel docker-compose
+# Le variabili di environment le manteniamo nel docker-compose
 
 CMD ["python3", "src/main.py", "--config", "configs/default.conf"]
