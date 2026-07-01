@@ -239,7 +239,7 @@ def _generate_html_report(
     # Renderizza il template
     html_content = template.render(
         evaluation_result=evaluation_result,
-        confusion_matrix=cm.tolist(),
+        confusion_matrix=cm,
         top_features=top_features,
         roc_points=roc_points,
         pr_points=pr_points,
