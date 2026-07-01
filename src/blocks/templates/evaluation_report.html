@@ -212,11 +212,11 @@
         <div class="metrics-grid">
             <div class="metric-card">
                 <h3>Accuracy</h3>
-                <div class="value">{{ "%.2%"|format(evaluation_result.accuracy) }}</div>
+                <div class="value">{{ "%.2f%%"|format(evaluation_result.accuracy * 100) }}</div>
             </div>
             <div class="metric-card">
                 <h3>Balanced Accuracy</h3>
-                <div class="value">{{ "%.2%"|format(evaluation_result.balanced_accuracy) }}</div>
+                <div class="value">{{ "%.2f%%"|format(evaluation_result.balanced_accuracy * 100) }}</div>
             </div>
             <div class="metric-card">
                 <h3>F1-Score</h3>
