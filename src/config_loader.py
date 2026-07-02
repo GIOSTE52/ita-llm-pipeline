@@ -46,7 +46,7 @@ def get_config():
         # modificare per scegliere i percorsi dei dati in input
         DATA_DIR = os.path.join(ROOT_DIR, "data")
         # INPUT_SUB_PATTERN = "dataset/sample_*.jsonl"
-        INPUT_SUB_PATTERN = "dataset/*.jsonl"
+        INPUT_SUB_PATTERN = "train/*.jsonl"
         print("MODALITÀ IMPOSTATA: REPOSITORY")
     # LOGICA DINAMICA TASK
     full_search_path = os.path.join(DATA_DIR, INPUT_SUB_PATTERN)

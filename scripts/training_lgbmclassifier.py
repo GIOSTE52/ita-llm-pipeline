@@ -28,7 +28,7 @@ if not os.path.exists(csv_path):
     print("Esegui prima la pipeline su un dataset etichettato così che genera un dataset formato csv. Utilizza docker compose up --build")
     sys.exit(1)
 # creo il percorso alla cartella dove contenere lo split del dataset
-output_dir = os.path.join(project_root, "models", "splits")
+output_dir = os.path.join(project_root, "data", "splits")
 # scrivo i valori di default per il random_state e la threshold
 random_state = 42
 validation_threshold = 0.65
